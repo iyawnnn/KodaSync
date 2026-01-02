@@ -2,6 +2,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from typing import List, Optional
 from datetime import datetime
 import uuid
+from pgvector.sqlalchemy import Vector # <--- NEW IMPORT
+from sqlalchemy import Column          # <--- NEW IMPORT
 
 # --- Base Model (Shared ID logic) ---
 class BaseIdModel(SQLModel):
@@ -15,16 +17,21 @@ class User(BaseIdModel, table=True):
     email: str = Field(unique=True, index=True)
     password_hash: str
     
-    # Relationship: One user has many notes
     notes: List["Note"] = Relationship(back_populates="owner")
 
 # --- NOTE TABLE ---
 class Note(BaseIdModel, table=True):
     title: str
-    code_snippet: str  # The actual code content
-    language: str = "javascript" # e.g., python, js, ts
-    tags: Optional[str] = None # Stores AI tags like "auth, loop, api"
+    code_snippet: str
+    language: str = "javascript"
+    tags: Optional[str] = None
     
-    # Foreign Key: Links back to a User
+    # --- NEW: THE BRAIN COLUMN ---
+    # We use 384 dimensions because that is what 'fastembed' produces
+    embedding: List[float] = Field(sa_column=Column(Vector(384)), default=None)
+
     owner_id: uuid.UUID = Field(foreign_key="users.id")
     owner: User = Relationship(back_populates="notes")
+
+class ChatRequest(SQLModel):
+    message: str

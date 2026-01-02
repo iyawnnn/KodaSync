@@ -2,67 +2,86 @@
 
 import { useState } from "react";
 import axios from "axios";
-import Cookies from "js-cookie"; // <--- 1. NEW IMPORT
-import { useRouter } from "next/navigation"; // <--- 2. NEW IMPORT
+import Cookies from "js-cookie";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export default function LoginPage() {
-  const router = useRouter(); // <--- 3. Initialize Router
+export default function AuthPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true); // <--- TOGGLE STATE
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccessMsg("");
 
     try {
-      const formData = new FormData();
-      formData.append("username", email);
-      formData.append("password", password);
+      if (isLogin) {
+        // --- LOGIN LOGIC ---
+        const formData = new FormData();
+        formData.append("username", email);
+        formData.append("password", password);
 
-      const response = await axios.post("http://localhost:8000/auth/login", formData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+        const response = await axios.post("http://localhost:8000/auth/login", formData, {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
 
-      const token = response.data.access_token;
-      
-      // --- 4. NEW LOGIC STARTS HERE ---
-      // Save token to cookies (expires in 1 day)
-      Cookies.set("token", token, { expires: 1 });
-      
-      // Redirect to the dashboard
-      router.push("/dashboard");
-      // --------------------------------
+        Cookies.set("token", response.data.access_token, { expires: 1 });
+        router.push("/dashboard");
+
+      } else {
+        // --- SIGN UP LOGIC ---
+        await axios.post("http://localhost:8000/auth/signup", {
+          email,
+          password
+        });
+        
+        setSuccessMsg("Account created! Logging you in...");
+        
+        // Auto-login after signup
+        setIsLogin(true); 
+        // We trigger the login logic immediately or let user click login. 
+        // For simplicity, let's just switch them to login view and show success.
+        setLoading(false);
+        return; 
+      }
 
     } catch (err: any) {
       console.error(err);
-      setError("Invalid email or password. Please try again.");
+      if (isLogin) {
+        setError("Invalid email or password.");
+      } else {
+        setError(err.response?.data?.detail || "Failed to create account.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ... (Rest of the JSX return statement remains the same) ...
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white p-4">
-      {/* ... keeping your existing Card code ... */}
       <Card className="w-full max-w-md border-zinc-800 bg-zinc-900 text-zinc-100">
         <CardHeader>
           <CardTitle className="text-2xl text-center font-bold text-white">
-            KodaSync
+            {isLogin ? "KodaSync Login" : "Join KodaSync"}
           </CardTitle>
           <CardDescription className="text-center text-zinc-400">
-            Enter your credentials to access your Second Brain.
+            {isLogin 
+              ? "Enter your credentials to access your Second Brain." 
+              : "Create a secure account to start syncing knowledge."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
@@ -88,12 +107,22 @@ export default function LoginPage() {
             </div>
             
             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {successMsg && <p className="text-green-500 text-sm text-center">{successMsg}</p>}
 
             <Button type="submit" className="w-full bg-white text-black hover:bg-zinc-200" disabled={loading}>
-              {loading ? "Connecting..." : "Sign In"}
+              {loading ? "Connecting..." : (isLogin ? "Sign In" : "Create Account")}
             </Button>
           </form>
         </CardContent>
+        
+        <CardFooter className="flex justify-center border-t border-zinc-800 pt-6">
+          <button 
+            onClick={() => { setIsLogin(!isLogin); setError(""); setSuccessMsg(""); }}
+            className="text-sm text-zinc-500 hover:text-white transition-colors underline"
+          >
+            {isLogin ? "Need an account? Sign Up" : "Already have an account? Login"}
+          </button>
+        </CardFooter>
       </Card>
     </div>
   );

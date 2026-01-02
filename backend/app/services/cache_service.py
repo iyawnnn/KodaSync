@@ -33,3 +33,10 @@ def clear_user_search_cache(user_id):
     if keys:
         redis_client.delete(*keys)
         print(f"🧹 Cleared {len(keys)} cache keys for user {user_id}")
+        
+def set_simple_cache(key: str, data: dict, expire: int = 3600):
+    """
+    Save simple dictionary/text data to Redis (Default: 1 hour)
+    Useful for AI responses that don't change often.
+    """
+    redis_client.setex(key, expire, json.dumps(data))

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import NoteCreator from "@/components/NoteCreator";
 import SearchBar from "@/components/SearchBar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ChatInterface from "@/components/ChatInterface"; // <--- NEW IMPORT
 
 export default function Dashboard() {
   const router = useRouter();
@@ -59,6 +60,7 @@ export default function Dashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-zinc-900 border-zinc-800">
             <TabsTrigger value="search">🔍 Search Memory</TabsTrigger>
+            <TabsTrigger value="chat">💬 Chat with Brain</TabsTrigger> {/* <--- NEW TRIGGER */}
             <TabsTrigger value="create">
               {noteToEdit ? "✏️ Edit Memory" : "➕ Add Knowledge"}
             </TabsTrigger>
@@ -67,6 +69,17 @@ export default function Dashboard() {
           <TabsContent value="search">
             {/* Pass the handleEditRequest function down */}
             <SearchBar onEdit={handleEditRequest} />
+          </TabsContent>
+
+          {/* <--- NEW CHAT CONTENT ---> */}
+          <TabsContent value="chat">
+            <div className="max-w-4xl mx-auto">
+              <div className="mb-4">
+                <h2 className="text-xl font-bold text-white">Neural Chat</h2>
+                <p className="text-zinc-400 text-sm">Ask questions based on your saved knowledge base.</p>
+              </div>
+              <ChatInterface />
+            </div>
           </TabsContent>
 
           <TabsContent value="create">

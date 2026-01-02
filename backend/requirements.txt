@@ -6,10 +6,14 @@ asyncpg
 redis
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt==4.0.1   # <--- Add this specific version lock
+bcrypt==4.0.1
 groq
 python-multipart
 pytest
 httpx
 slowapi
 email-validator
+# --- AI BRAIN LIBRARIES ---
+fastembed==0.3.1
+pydantic-settings
+pgvector==0.3.0
