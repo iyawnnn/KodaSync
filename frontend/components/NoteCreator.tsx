@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react"; // <--- Added useEffect
+import { useState, useEffect } from "react";
 import axios from "axios";
 import Cookies from "js-cookie";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import Editor from "@monaco-editor/react";
+import { Wand2, Save, Loader2 } from "lucide-react"; // <--- New Icons
 
-// Define what a Note looks like
 interface NoteData {
   id?: string;
   title: string;
@@ -18,7 +18,6 @@ interface NoteData {
   tags?: string;
 }
 
-// Accept props to support "Edit Mode"
 export default function NoteCreator({ 
   initialData, 
   onSuccess 
@@ -30,58 +29,79 @@ export default function NoteCreator({
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("javascript");
   const [loading, setLoading] = useState(false);
+  const [fixing, setFixing] = useState(false); // <--- New State for Fixer
   const [lastNote, setLastNote] = useState<any>(null);
 
-  // Load data if we are editing
   useEffect(() => {
     if (initialData) {
       setTitle(initialData.title);
       setCode(initialData.code_snippet);
       setLanguage(initialData.language || "javascript");
-      setLastNote(initialData); // Show the current state immediately
+      setLastNote(initialData);
     }
   }, [initialData]);
 
+  // --- NEW: AUTO-FIX FUNCTION ---
+  const handleFixCode = async () => {
+    if (!code) return alert("Write some code first!");
+    setFixing(true);
+    try {
+      const token = Cookies.get("token");
+      const response = await axios.post(
+        "http://localhost:8000/notes/fix/",
+        { 
+          code_snippet: code, 
+          language: language 
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Update the editor with the fixed code
+      setCode(response.data.fixed_code);
+      alert("✨ Code fixed by AI!");
+    } catch (error) {
+      console.error("Fix failed:", error);
+      alert("Could not fix code.");
+    } finally {
+      setFixing(false);
+    }
+  };
+  // ------------------------------
+
   const handleSave = async () => {
     if (!title || !code) return alert("Please fill in both fields");
-    
     setLoading(true);
     const token = Cookies.get("token");
 
     try {
       let response;
-      
-      // DECIDE: Create (POST) or Update (PUT)?
       if (initialData?.id) {
-        // --- UPDATE MODE ---
         response = await axios.put(
           `http://localhost:8000/notes/${initialData.id}`,
           { title, code_snippet: code, language },
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } else {
-        // --- CREATE MODE ---
         response = await axios.post(
           "http://localhost:8000/notes/",
           { title, code_snippet: code, language },
           { headers: { Authorization: `Bearer ${token}` } }
         );
       }
-
       setLastNote(response.data);
-      
-      // Only clear if we created a NEW note. 
-      // If editing, we usually want to keep looking at it.
       if (!initialData?.id) {
         setTitle("");
         setCode("");
       }
-      
-      if (onSuccess) onSuccess(); // Tell parent component we are done
-      
-    } catch (error) {
-      console.error("Failed to save note:", error);
-      alert("Error saving note. Check console.");
+      if (onSuccess) onSuccess();
+    } catch (error: any) {
+      if (error.response && error.response.status === 401) {
+        alert("Session expired. Please log in again.");
+        Cookies.remove("token");
+        window.location.href = "/";
+        return;
+      }
+      alert("Error saving note.");
     } finally {
       setLoading(false);
     }
@@ -89,12 +109,9 @@ export default function NoteCreator({
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      {/* LEFT: The Form */}
       <Card className="border-zinc-800 bg-zinc-900 text-zinc-100">
         <CardHeader>
-          <CardTitle>
-            {initialData ? "Edit Memory" : "New Code Snippet"}
-          </CardTitle>
+          <CardTitle>{initialData ? "Edit Memory" : "New Code Snippet"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -122,7 +139,20 @@ export default function NoteCreator({
           </div>
 
           <div className="space-y-2">
-            <Label>Code</Label>
+            <div className="flex justify-between items-center">
+              <Label>Code</Label>
+              {/* --- NEW FIX BUTTON --- */}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleFixCode}
+                disabled={fixing}
+                className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 h-6 text-xs"
+              >
+                {fixing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Wand2 className="w-3 h-3 mr-1"/>}
+                {fixing ? "Fixing..." : "Auto-Fix"}
+              </Button>
+            </div>
             <div className="border border-zinc-700 rounded-md overflow-hidden">
               <Editor
                 height="300px"
@@ -135,17 +165,18 @@ export default function NoteCreator({
               />
             </div>
           </div>
+          
           <Button 
             onClick={handleSave} 
             disabled={loading}
             className="w-full bg-white text-black hover:bg-zinc-200"
           >
-            {loading ? "AI is Thinking..." : (initialData ? "Update Memory" : "Save to Brain")}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>}
+            {initialData ? "Update Memory" : "Save to Brain"}
           </Button>
         </CardContent>
       </Card>
 
-      {/* RIGHT: The AI Result */}
       <Card className="border-zinc-800 bg-zinc-900 text-zinc-100">
         <CardHeader>
           <CardTitle>AI Analysis Output</CardTitle>
@@ -162,7 +193,7 @@ export default function NoteCreator({
                 <div className="text-xl font-bold text-white">{lastNote.title}</div>
               </div>
               <div>
-                <Label className="text-zinc-400">Detected Tags (By Groq)</Label>
+                <Label className="text-zinc-400">Detected Tags</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {lastNote.tags?.split(",").map((tag: string, i: number) => (
                     <span key={i} className="px-2 py-1 bg-blue-900 text-blue-100 text-xs rounded-full border border-blue-700">

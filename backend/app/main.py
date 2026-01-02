@@ -1,31 +1,28 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from contextlib import asynccontextmanager
-from .database import create_db_and_tables
+from fastapi.responses import JSONResponse
 from .routers import auth, notes
-from .limiter import limiter # <--- 1. Import the limiter
+from .database import init_db
+from .limiter import limiter
+from slowapi.errors import RateLimitExceeded
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("🚀 KodaSync Brain is starting up...")
-    create_db_and_tables()
-    print("✅ Database Tables Checked/Created")
-    yield
-    print("💤 KodaSync Brain is shutting down...")
+app = FastAPI(title="KodaSync API", version="1.0.0")
 
-app = FastAPI(
-    title="KodaSync API",
-    version="0.1.0",
-    lifespan=lifespan
-)
-
-# --- 2. Attach Limiter to App ---
+# 1. Register the Rate Limiter
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-# --------------------------------
+app.add_exception_handler(RateLimitExceeded, lambda r, e: JSONResponse(status_code=429, content={"detail": "Too many requests. Slow down!"}))
 
+# 2. GLOBAL Error Handler (Prevents crashes)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"🔥 CRITICAL ERROR: {exc}") 
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+    )
+
+# 3. CORS SECURITY (The Fix for 'Network Error')
+# We explicitly allow localhost:3000 to send requests
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -33,19 +30,20 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins, 
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], # Allow GET, POST, PUT, DELETE, OPTIONS
+    allow_headers=["*"], # Allow Authorization headers (Tokens)
 )
 
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+# 4. Register Routes
 app.include_router(auth.router)
 app.include_router(notes.router)
 
 @app.get("/")
-async def root():
-    return {"message": "KodaSync Systems Online", "status": "active"}
-
-@app.get("/health")
-async def health_check():
-    return {"database": "connected", "mode": "mvp"}
+def read_root():
+    return {"status": "active", "system": "KodaSync Neural Core"}
