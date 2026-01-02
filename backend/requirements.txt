@@ -1,0 +1,15 @@
+fastapi>=0.110.0
+uvicorn[standard]
+sqlmodel>=0.0.16
+psycopg2-binary
+asyncpg
+redis
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1   # <--- Add this specific version lock
+groq
+python-multipart
+pytest
+httpx
+slowapi
+email-validator
