@@ -10,8 +10,14 @@ jobs:
   test-backend:
     runs-on: ubuntu-latest
     
+    # FIX 1: Define Env Vars globally for this job so they are never ignored
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/kodasync_db
+      REDIS_URL: redis://localhost:6379/0  # Must be localhost for GitHub Actions
+      SECRET_KEY: "ci_testing_secret_key"
+      GROQ_API_KEY: "mock_key" # We mock this, so a fake key is fine
+
     services:
-      # Postgres Service
       db:
         image: pgvector/pgvector:pg16
         env:
@@ -20,17 +26,18 @@ jobs:
           POSTGRES_DB: kodasync_db
         ports:
           - 5432:5432
+        # Database Health Check
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
       
-      # FIX 1: Redis Service with Health Check
       redis:
         image: redis:alpine
         ports:
           - 6379:6379
+        # FIX 2: Redis Health Check (Crucial!)
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -53,12 +60,7 @@ jobs:
         pip install httpx pytest pydantic-settings
 
     - name: Run Integration Tests
-      env:
-        # We inject test config here
-        DATABASE_URL: postgresql://user:password@localhost:5432/kodasync_db
-        REDIS_URL: redis://localhost:6379/0
-        SECRET_KEY: "ci_testing_secret_key"
-        GROQ_API_KEY: "mock_key" 
       run: |
         cd backend
+        # The env vars defined at the top will automatically apply here
         python -m pytest tests/test_api.py
