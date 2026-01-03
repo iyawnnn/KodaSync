@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     
     services:
+      # Postgres Service
       db:
         image: pgvector/pgvector:pg16
         env:
@@ -19,17 +20,22 @@ jobs:
           POSTGRES_DB: kodasync_db
         ports:
           - 5432:5432
-        # Health check to ensure DB is ready before tests start
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
       
+      # FIX 1: Redis Service with Health Check
       redis:
         image: redis:alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v4
@@ -52,7 +58,7 @@ jobs:
         DATABASE_URL: postgresql://user:password@localhost:5432/kodasync_db
         REDIS_URL: redis://localhost:6379/0
         SECRET_KEY: "ci_testing_secret_key"
-        GROQ_API_KEY: "mock_key" # The tests now Mock this, so any string works
+        GROQ_API_KEY: "mock_key" 
       run: |
         cd backend
         python -m pytest tests/test_api.py
