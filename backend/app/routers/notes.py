@@ -1,236 +1,336 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks
 import uuid
-from ..limiter import limiter 
-from sqlmodel import Session, select, col, or_
-from ..database import get_session
-from ..models import Note, User
-from ..schemas.note import NoteCreate, NoteRead, ExplainRequest, ChatRequest, FixRequest 
-from ..services.auth_service import SECRET_KEY, ALGORITHM
-from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
-from ..services.cache_service import get_cache, set_cache, clear_user_search_cache, set_simple_cache
-from ..services.ai_service import generate_tags, explain_code_snippet, chat_with_notes, perform_ai_action
-from ..services.vector_service import get_vector
 import hashlib
 from collections import Counter
+from typing import Optional, List
+
+from sqlmodel import Session, select
+from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+
+# Internal Modules
+from ..limiter import limiter
+from ..database import get_session, engine
+from ..models import Note, User
+from ..schemas.note import NoteCreate, NoteRead, ExplainRequest, FixRequest
+from ..services.auth_service import SECRET_KEY, ALGORITHM
+from ..services.cache_service import (
+    get_cache,
+    set_cache,
+    clear_user_search_cache,
+    set_simple_cache,
+)
+from ..services.ai_service import (
+    generate_tags,
+    explain_code_snippet,
+    chat_with_notes,
+    perform_ai_action,
+)
+from ..services.vector_service import get_vector
+from ..services.scraper_service import scrape_url 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router = APIRouter(prefix="/notes", tags=["Notes"])
 
-def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+
+# --- Models ---
+class UrlImportRequest(BaseModel):
+    url: str
+    project_id: Optional[str] = None
+
+
+# --- Dependency ---
+def get_current_user(
+    token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)
+):
     credentials_exception = HTTPException(
-        status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"},
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
-        if user_id is None: raise credentials_exception
+        if user_id is None:
+            raise credentials_exception
         user = session.get(User, user_id)
-        if user is None: raise credentials_exception
+        if user is None:
+            raise credentials_exception
         return user
     except JWTError:
         raise credentials_exception
 
-@router.post("/", response_model=NoteRead)
-@limiter.limit("5/minute")
-async def create_note(request: Request, note_data: NoteCreate, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    print("🤖 AI is analyzing your code...")
-    ai_tags = generate_tags(note_data.code_snippet, note_data.language)
-    combined_text = f"{note_data.title} \n {note_data.code_snippet}"
-    vector = get_vector(combined_text)
 
+# --- Background Task ---
+def process_note_ai(
+    note_id: uuid.UUID, user_id: uuid.UUID, title: str, code: str, language: str
+):
+    """
+    Runs in the background to generate AI tags and embeddings.
+    """
+    try:
+        print(f"⚙️ Background: Generating AI metadata for note {note_id}...")
+        ai_tags = generate_tags(code, language)
+        combined_text = f"{title} \n {code}"
+        vector = get_vector(combined_text)
+
+        with Session(engine) as session:
+            note = session.get(Note, note_id)
+            if note:
+                note.tags = ai_tags
+                note.embedding = vector
+                session.add(note)
+                session.commit()
+                print(f"✅ Background: Note {note_id} updated successfully.")
+
+        clear_user_search_cache(user_id)
+    except Exception as e:
+        print(f"🔥 Background Task Failed: {e}")
+
+
+# --- 🚀 NEW ENDPOINT: Import from URL ---
+@router.post("/import-url", response_model=NoteRead)
+@limiter.limit("5/minute")
+async def import_note_from_url(
+    request: Request,
+    body: UrlImportRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    # 1. Scrape
+    data = scrape_url(body.url)
+    if not data:
+        raise HTTPException(status_code=400, detail="Could not scrape that URL")
+
+    # 2. Vectorize (Synchronous for immediate searchability)
+    vector = get_vector(data["content"])
+
+    # 3. Create Note
     new_note = Note(
-        title=note_data.title, 
-        code_snippet=note_data.code_snippet, 
-        language=note_data.language,
-        tags=ai_tags, 
-        embedding=vector, 
+        title=f"Imported: {data['title']}",
+        content=data["content"],
+        # 🚀 FIXED: Removed the limit. Now captures full files.
+        code_snippet=data["content"], 
+        language=data["language"],
+        tags="imported,documentation",
         owner_id=current_user.id,
-        project_id=note_data.project_id # <--- ADD THIS LINE
+        project_id=uuid.UUID(body.project_id) if body.project_id else None,
+        embedding=vector,
     )
-    
+
     session.add(new_note)
     session.commit()
     session.refresh(new_note)
+
     clear_user_search_cache(current_user.id)
+
     return new_note
 
-# --- NEW: Get All Notes (For My Library) ---
-@router.get("/", response_model=list[NoteRead])
+
+# --- Standard Endpoints ---
+
+@router.post("/", response_model=NoteRead)
+@limiter.limit("5/minute")
+async def create_note(
+    request: Request,
+    note_data: NoteCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    new_note = Note(
+        title=note_data.title,
+        code_snippet=note_data.code_snippet,
+        language=note_data.language,
+        tags="",  # Placeholder
+        embedding=None,  # Placeholder
+        owner_id=current_user.id,
+        project_id=note_data.project_id,
+    )
+
+    session.add(new_note)
+    session.commit()
+    session.refresh(new_note)
+
+    background_tasks.add_task(
+        process_note_ai,
+        new_note.id,
+        current_user.id,
+        new_note.title,
+        new_note.code_snippet,
+        new_note.language,
+    )
+    return new_note
+
+
+@router.get("/", response_model=List[NoteRead])
 async def get_all_notes(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
-    # Sort by: Pinned (True first), then Created At (Newest first)
-    statement = select(Note).where(Note.owner_id == current_user.id).order_by(
-        Note.is_pinned.desc(), 
-        Note.created_at.desc()
+    statement = (
+        select(Note)
+        .where(Note.owner_id == current_user.id)
+        .order_by(Note.is_pinned.desc(), Note.created_at.desc())
     )
     results = session.exec(statement).all()
     return results
-# -------------------------------------------
 
-@router.get("/search/", response_model=list[NoteRead])
-async def search_notes(q: str, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+
+@router.get("/search/", response_model=List[NoteRead])
+async def search_notes(
+    q: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     cache_key = f"search:{current_user.id}:{q.lower()}"
     cached_result = get_cache(cache_key)
-    if cached_result: return cached_result
+    if cached_result:
+        return cached_result
 
-    print(f"🧠 Semantic Search for '{q}'...")
     query_vector = get_vector(q)
-    statement = select(Note).where(Note.owner_id == current_user.id).order_by(
-        Note.embedding.cosine_distance(query_vector)
-    ).limit(10)
-    
+    statement = (
+        select(Note)
+        .where(Note.owner_id == current_user.id)
+        .order_by(Note.embedding.cosine_distance(query_vector))
+        .limit(10)
+    )
+
     results = session.exec(statement).all()
     clean_results = [NoteRead.model_validate(note) for note in results]
-    
-    if clean_results: set_cache(cache_key, clean_results)
+
+    if clean_results:
+        set_cache(cache_key, clean_results)
     return clean_results
+
 
 @router.get("/tags/")
 async def get_user_tags(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
-    # 1. Fetch all tag strings
     statement = select(Note.tags).where(Note.owner_id == current_user.id)
     results = session.exec(statement).all()
-    
-    # 2. Count frequencies
     tag_counter = Counter()
     for tag_str in results:
         if tag_str:
-            # Split, strip whitespace, and handle case (Python vs python)
-            tags = [t.strip() for t in tag_str.split(",")] 
+            tags = [t.strip() for t in tag_str.split(",")]
             tag_counter.update(tags)
-            
-    # 3. Return tags sorted by popularity (Most common first)
-    # This ensures the most "useful" filters are always on the left
     return [tag for tag, count in tag_counter.most_common()]
 
+
 @router.put("/{note_id}", response_model=NoteRead)
-async def update_note(note_id: str, note_data: NoteCreate, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    try: n_uuid = uuid.UUID(note_id)
-    except ValueError: raise HTTPException(status_code=400, detail="Invalid ID")
+async def update_note(
+    note_id: str,
+    note_data: NoteCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    try:
+        n_uuid = uuid.UUID(note_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    
     note = session.get(Note, n_uuid)
-    if not note or note.owner_id != current_user.id: raise HTTPException(status_code=404, detail="Not found")
+    if not note or note.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Not found")
 
     new_tags = generate_tags(note_data.code_snippet, note_data.language)
     new_vector = get_vector(f"{note_data.title} \n {note_data.code_snippet}")
-    
+
     note.title = note_data.title
     note.code_snippet = note_data.code_snippet
     note.language = note_data.language
     note.tags = new_tags
     note.embedding = new_vector
-    
+
     session.add(note)
     session.commit()
     session.refresh(note)
     clear_user_search_cache(current_user.id)
     return note
 
+
 @router.patch("/{note_id}/pin")
 async def toggle_pin(
-    note_id: str, 
-    current_user: User = Depends(get_current_user), 
-    session: Session = Depends(get_session)
+    note_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ):
-    try: n_uuid = uuid.UUID(note_id)
-    except ValueError: raise HTTPException(status_code=400, detail="Invalid ID")
-
+    try:
+        n_uuid = uuid.UUID(note_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    
     note = session.get(Note, n_uuid)
-    if not note or note.owner_id != current_user.id: 
+    if not note or note.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Not found")
-
-    note.is_pinned = not note.is_pinned # Toggle
+    
+    note.is_pinned = not note.is_pinned
     session.add(note)
     session.commit()
     return {"message": "Toggled", "is_pinned": note.is_pinned}
 
+
 @router.delete("/{note_id}")
-async def delete_note(note_id: str, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    try: n_uuid = uuid.UUID(note_id)
-    except ValueError: raise HTTPException(status_code=400, detail="Invalid ID")
+async def delete_note(
+    note_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    try:
+        n_uuid = uuid.UUID(note_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    
     note = session.get(Note, n_uuid)
-    if not note or note.owner_id != current_user.id: raise HTTPException(status_code=404, detail="Not found")
+    if not note or note.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    
     session.delete(note)
     session.commit()
     clear_user_search_cache(current_user.id)
     return {"message": "Deleted"}
 
+
 @router.post("/explain/")
 @limiter.limit("5/minute")
-async def explain_note(request: Request, body: ExplainRequest, current_user: User = Depends(get_current_user)):
+async def explain_note(
+    request: Request,
+    body: ExplainRequest,
+    current_user: User = Depends(get_current_user),
+):
     snippet_hash = hashlib.md5(body.code_snippet.encode()).hexdigest()
     cache_key = f"explain:{snippet_hash}"
     cached_result = get_cache(cache_key)
-    if cached_result: return cached_result
-
-    print("🎓 AI is explaining...")
+    if cached_result:
+        return cached_result
+    
     explanation = explain_code_snippet(body.code_snippet, body.language)
     response_data = {"explanation": explanation}
     set_simple_cache(cache_key, response_data)
     return response_data
 
-@router.post("/chat/")
-@limiter.limit("10/minute")
-async def chat_rag(request: Request, body: ChatRequest, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    print(f"💬 Chatting: {body.message}")
-    query_vector = get_vector(body.message)
-    
-    statement = select(Note).where(Note.owner_id == current_user.id).order_by(
-        Note.embedding.cosine_distance(query_vector)
-    ).limit(3)
-    
-    relevant_notes = session.exec(statement).all()
-    
-    if not relevant_notes:
-        context_str = "No relevant notes found."
-    else:
-        context_str = "\n\n".join([f"--- Note: {note.title} ({note.language}) ---\n{note.code_snippet}" for note in relevant_notes])
-    
-    print("🧠 Asking Llama 3...")
-    answer = chat_with_notes(context_str, body.message)
-    
-    return {"reply": answer, "sources": [n.title for n in relevant_notes]}
 
 @router.post("/fix/")
 @limiter.limit("5/minute")
 async def fix_code(
-    request: Request,
-    body: FixRequest,
-    current_user: User = Depends(get_current_user)
+    request: Request, body: FixRequest, current_user: User = Depends(get_current_user)
 ):
-    request.state.user = current_user 
-    
-    # 1. Generate Cache Key (Fingerprint)
-    # Unique per code content + language + action type
+    request.state.user = current_user
     raw_data = f"{body.code_snippet}-{body.language}-{body.action}"
     snippet_hash = hashlib.md5(raw_data.encode()).hexdigest()
     cache_key = f"fix:{snippet_hash}"
-
-    # 2. Check Cache
+    
     cached_result = get_cache(cache_key)
-    if cached_result: 
-        print(f"⚡ Serving {body.action} result from Cache")
+    if cached_result:
         return cached_result
-
-    print(f"🔧 AI is running action: {body.action}...")
     
-    # 3. Call AI Service
     result_code = perform_ai_action(
-        body.code_snippet, 
-        body.language, 
-        body.action, 
-        body.error_message
+        body.code_snippet, body.language, body.action, body.error_message
     )
-    
     response_data = {"fixed_code": result_code}
-    
-    # 4. Save to Cache
     set_simple_cache(cache_key, response_data)
-    
     return response_data

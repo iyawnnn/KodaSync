@@ -10,11 +10,18 @@ class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(unique=True, index=True)
     password_hash: str
+    
+    # --- NEW: Store Refresh Token ---
+    # We store it to validate/revoke it. 
+    # In a real app, you might hash this too, but for V1 storing the string is okay
+    # provided your DB is secure.
+    refresh_token: Optional[str] = None 
+    
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     notes: List["Note"] = Relationship(back_populates="owner")
     projects: List["Project"] = Relationship(back_populates="owner")
-    chat_sessions: List["ChatSession"] = Relationship(back_populates="user") # <--- New
+    chat_sessions: List["ChatSession"] = Relationship(back_populates="user")
 
 class Project(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -39,11 +46,11 @@ class Note(SQLModel, table=True):
     project_id: Optional[uuid.UUID] = Field(default=None, foreign_key="project.id")
     project: Optional[Project] = Relationship(back_populates="notes")
 
-# --- NEW CHAT ARCHITECTURE ---
 class ChatSession(SQLModel, table=True):
     __tablename__ = "chat_sessions"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     title: str = "New Chat"
+    is_pinned: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: uuid.UUID = Field(foreign_key="users.id")
     user: User = Relationship(back_populates="chat_sessions")
@@ -55,7 +62,5 @@ class ChatMessage(SQLModel, table=True):
     role: str 
     content: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Link to Session instead of just User
     session_id: uuid.UUID = Field(foreign_key="chat_sessions.id")
     session: ChatSession = Relationship(back_populates="messages")

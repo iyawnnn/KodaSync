@@ -1,31 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import axios from "axios";
-import Cookies from "js-cookie";
+import api from "@/lib/api"; 
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardFooter,
+  Card, CardContent, CardHeader, CardTitle, CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Trash2, Edit, X, Pin, Copy, MoreHorizontal, Check } from "lucide-react";
 import {
-  Trash2,
-  Edit,
-  X,
-  Pin,
-  Copy,
-  MoreHorizontal,
-  Check,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner"; // <--- Import toast
 
 interface Note {
   id: string;
@@ -35,10 +20,9 @@ interface Note {
   tags?: string;
   created_at: string;
   is_pinned?: boolean;
-  project_id?: string; // <--- Ensure this exists
+  project_id?: string;
 }
 
-// FIX: Accept 'projectId' as a prop
 export default function NoteLibrary({
   onEdit,
   projectId,
@@ -58,16 +42,14 @@ export default function NoteLibrary({
 
   const fetchData = async () => {
     try {
-      const token = Cookies.get("token");
-      const headers = { Authorization: `Bearer ${token}` };
       const [notesRes, tagsRes] = await Promise.all([
-        axios.get("http://localhost:8000/notes/", { headers }),
-        axios.get("http://localhost:8000/notes/tags/", { headers }),
+        api.get("/notes/"),
+        api.get("/notes/tags/"),
       ]);
       setNotes(notesRes.data);
       setTags(tagsRes.data);
     } catch (e) {
-      console.error("Error loading library", e);
+      toast.error("Failed to load library");
     } finally {
       setLoading(false);
     }
@@ -76,46 +58,39 @@ export default function NoteLibrary({
   const handlePin = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      const token = Cookies.get("token");
-      await axios.patch(
-        `http://localhost:8000/notes/${id}/pin`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await api.patch(`/notes/${id}/pin`);
       setNotes(
         notes.map((n) => (n.id === id ? { ...n, is_pinned: !n.is_pinned } : n))
       );
-      // Re-fetch to sort correctly
-      fetchData();
+      fetchData(); 
     } catch (e) {
-      console.error("Pin failed");
+      toast.error("Failed to pin note");
     }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm("Delete this memory?")) return;
-    const token = Cookies.get("token");
-    await axios.delete(`http://localhost:8000/notes/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setNotes(notes.filter((n) => n.id !== id));
+    
+    try {
+      await api.delete(`/notes/${id}`);
+      setNotes(notes.filter((n) => n.id !== id));
+      toast.success("Memory deleted");
+    } catch (e) {
+      toast.error("Failed to delete");
+    }
   };
 
   const handleCopy = (e: React.MouseEvent, text: string, id: string) => {
     e.stopPropagation();
     navigator.clipboard.writeText(text);
     setCopiedId(id);
+    toast.success("Code copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // --- FIX: FILTERING LOGIC ---
   const filteredNotes = notes.filter((n) => {
-    // 1. Filter by Project (if selected)
     if (projectId && n.project_id !== projectId) return false;
-    // 2. Filter by Tag (if selected)
     if (selectedTag && !n.tags?.includes(selectedTag)) return false;
     return true;
   });

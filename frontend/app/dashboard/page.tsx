@@ -45,7 +45,7 @@ export default function DashboardPage() {
       default:
         return (
           <NoteLibrary
-            projectId={currentProject?.id} // <--- PASS THE PROJECT ID HERE
+            projectId={currentProject?.id}
             onEdit={(note) => {
               setEditingNote(note);
               setActiveTab("create");
@@ -59,7 +59,6 @@ export default function DashboardPage() {
   const handleSelectProject = (project: any) => {
     setCurrentProject(project);
     setActiveTab("library");
-    // In a real app, you would pass 'project.id' to NoteLibrary to filter the list
   };
 
   const handleSelectSession = (sessionId: string) => {
@@ -113,7 +112,14 @@ export default function DashboardPage() {
         </header>
 
         {/* --- MAIN WORKSPACE --- */}
-        <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+        {/* CRITICAL: overflow-hidden for 'chat' allows the ChatInterface ScrollArea to work */}
+        <div
+          className={`flex-1 p-6 ${
+            activeTab === "chat"
+              ? "overflow-hidden"
+              : "overflow-y-auto scroll-smooth"
+          }`}
+        >
           <div className="max-w-7xl mx-auto h-full">{renderContent()}</div>
         </div>
       </SidebarInset>

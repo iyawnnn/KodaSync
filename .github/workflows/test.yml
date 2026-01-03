@@ -10,16 +10,18 @@ jobs:
   test-backend:
     runs-on: ubuntu-latest
     
-    # FIX: Explicitly set REDIS_HOST to localhost to override any defaults
+    # 🔧 ENVIRONMENT CONFIGURATION
+    # Matches your docker-compose logic but pointing to CI services
     env:
       DATABASE_URL: postgresql://user:password@localhost:5432/kodasync_db
       REDIS_URL: redis://localhost:6379/0
       REDIS_HOST: localhost 
       REDIS_PORT: 6379
       SECRET_KEY: "ci_testing_secret_key"
-      GROQ_API_KEY: "mock_key"
+      GROQ_API_KEY: "mock_key_for_ci" # AI is mocked, so this can be fake
 
     services:
+      # 1. Database with Vector Support
       db:
         image: pgvector/pgvector:pg16
         env:
@@ -34,6 +36,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
+      # 2. Redis Cache
       redis:
         image: redis:alpine
         ports:
@@ -56,10 +59,13 @@ jobs:
       run: |
         cd backend
         python -m pip install --upgrade pip
+        # This will now install beautifulsoup4, requests, etc.
         pip install -r requirements.txt
-        pip install httpx pytest pydantic-settings
+        # Install test-specific tools (if not in requirements.txt)
+        pip install httpx pytest pytest-asyncio
 
     - name: Run Integration Tests
       run: |
         cd backend
-        python -m pytest tests/test_api.py
+        # -v gives verbose output so you can see which tests pass
+        python -m pytest tests/test_api.py -v

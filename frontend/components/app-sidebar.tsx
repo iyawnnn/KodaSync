@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import axios from "axios";
-import Cookies from "js-cookie";
+import api from "@/lib/api";
 import {
   Command,
   Folder,
@@ -11,9 +10,13 @@ import {
   Library,
   Plus,
   MessageCircle,
+  MoreHorizontal,
+  Trash2,
+  Edit2,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { NavUser } from "@/components/nav-user";
-import { Label } from "@/components/ui/label";
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +29,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner"; // <--- Import toast
 
 const tools = [
   { title: "My Library", id: "library", icon: Library },
@@ -50,21 +61,15 @@ export function AppSidebar({
 
   React.useEffect(() => {
     fetchData();
-  }, [activeTab]); // Refetch when tab changes
+  }, [activeTab]);
 
   const fetchData = async () => {
-    const token = Cookies.get("token");
-    if (!token) return;
     try {
       if (activeTab === "chat") {
-        const res = await axios.get("http://localhost:8000/chat/sessions", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/chat/sessions");
         setSessions(res.data);
       } else {
-        const res = await axios.get("http://localhost:8000/projects/", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/projects/");
         setProjects(res.data);
       }
     } catch (e) {
@@ -74,38 +79,69 @@ export function AppSidebar({
 
   const createItem = async (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && newItemName.trim()) {
-      const token = Cookies.get("token");
       try {
         if (activeTab === "chat") {
-          // Creating a chat session usually happens automatically, but we can support manual creation or just search
-          // For now, let's keep it simple: Use the button below to start new chat
+          // Manual chat creation usually not needed
         } else {
-          const res = await axios.post(
-            "http://localhost:8000/projects/",
-            { name: newItemName },
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
+          const res = await api.post("/projects/", { name: newItemName });
           setProjects([res.data, ...projects]);
+          toast.success("Project created");
         }
         setNewItemName("");
       } catch (e) {
-        alert("Failed");
+        toast.error("Failed to create project");
       }
     }
   };
 
   const handleNewChat = async () => {
-    const token = Cookies.get("token");
     try {
-      const res = await axios.post(
-        "http://localhost:8000/chat/sessions",
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.post("/chat/sessions", {});
       setSessions([res.data, ...sessions]);
       onSelectSession(res.data.id);
     } catch (e) {
-      alert("Could not start chat");
+      toast.error("Could not start chat");
+    }
+  };
+
+  const handlePin = async (e: React.MouseEvent, session: any) => {
+    e.stopPropagation();
+    try {
+      await api.patch(`/chat/sessions/${session.id}`, {
+        is_pinned: !session.is_pinned,
+      });
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to update session");
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Delete this conversation?")) return;
+    try {
+      await api.delete(`/chat/sessions/${id}`);
+      setSessions(sessions.filter((s) => s.id !== id));
+      toast.success("Conversation deleted");
+    } catch (e) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const handleRename = async (e: React.MouseEvent, session: any) => {
+    e.stopPropagation();
+    const newTitle = prompt("Rename conversation:", session.title);
+    if (!newTitle) return;
+    try {
+      await api.patch(`/chat/sessions/${session.id}`, { title: newTitle });
+      setSessions(
+        sessions.map((s) =>
+          s.id === session.id ? { ...s, title: newTitle } : s
+        )
+      );
+      toast.success("Renamed successfully");
+    } catch (e) {
+      toast.error("Failed to rename");
     }
   };
 
@@ -192,18 +228,74 @@ export function AppSidebar({
           <SidebarGroup className="px-0">
             <SidebarGroupContent>
               {activeTab === "chat"
-                ? // CHAT SESSIONS LIST
+                ? // CHAT SESSIONS LIST (Updated with Menu)
                   sessions.map((session) => (
-                    <button
+                    <div
                       key={session.id}
-                      onClick={() => onSelectSession(session.id)}
-                      className="w-full text-left flex items-center gap-2 border-b border-zinc-800/50 p-4 text-sm hover:bg-zinc-900 transition-colors"
+                      className="group flex items-center w-full hover:bg-zinc-900 border-b border-zinc-800/50 transition-colors"
                     >
-                      <MessageCircle className="size-4 text-green-500 shrink-0" />
-                      <span className="font-medium truncate text-zinc-300">
-                        {session.title}
-                      </span>
-                    </button>
+                      <button
+                        onClick={() => onSelectSession(session.id)}
+                        className="flex-1 text-left flex items-center gap-2 p-4 text-sm min-w-0"
+                      >
+                        <MessageCircle
+                          className={`size-4 shrink-0 ${
+                            session.is_pinned
+                              ? "text-yellow-500 fill-yellow-500/10"
+                              : "text-green-500"
+                          }`}
+                        />
+                        <span
+                          className={`font-medium truncate ${
+                            session.is_pinned
+                              ? "text-yellow-100"
+                              : "text-zinc-300"
+                          }`}
+                        >
+                          {session.title}
+                        </span>
+                      </button>
+
+                      {/* THREE DOTS MENU */}
+                      <div className="pr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-zinc-300">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            className="bg-zinc-900 border-zinc-800 text-zinc-200"
+                            align="end"
+                          >
+                            <DropdownMenuItem
+                              onClick={(e) => handleRename(e, session)}
+                              className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 mr-2" /> Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => handlePin(e, session)}
+                              className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+                            >
+                              {session.is_pinned ? (
+                                <PinOff className="w-3.5 h-3.5 mr-2" />
+                              ) : (
+                                <Pin className="w-3.5 h-3.5 mr-2" />
+                              )}
+                              {session.is_pinned ? "Unpin" : "Pin"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-zinc-800" />
+                            <DropdownMenuItem
+                              onClick={(e) => handleDelete(e, session.id)}
+                              className="text-red-400 cursor-pointer hover:bg-red-900/20 focus:bg-red-900/20 hover:text-red-300 focus:text-red-300"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
                   ))
                 : // PROJECTS LIST
                   projects.map((proj) => (

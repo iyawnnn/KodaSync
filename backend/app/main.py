@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-# FIX: Import chat and projects
 from .routers import auth, notes, chat, projects 
 from .database import init_db
 from .limiter import limiter
@@ -22,10 +21,14 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal Server Error"},
     )
 
-# 3. CORS SECURITY
+# 3. CORS SECURITY (Deployment Ready)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    # Allow Vercel Deployments (Wildcard for previews)
+    "https://*.vercel.app",
+    # ⚠️ TEMP: Allow all to prevent headaches during first deploy
+    "*" 
 ]
 
 app.add_middleware(
@@ -43,8 +46,8 @@ def on_startup():
 # 4. Register Routes
 app.include_router(auth.router)
 app.include_router(notes.router)
-app.include_router(chat.router)     # <--- Added
-app.include_router(projects.router) # <--- Added
+app.include_router(chat.router)    
+app.include_router(projects.router) 
 
 @app.get("/")
 def read_root():
