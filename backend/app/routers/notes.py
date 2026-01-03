@@ -9,9 +9,10 @@ from ..services.auth_service import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from ..services.cache_service import get_cache, set_cache, clear_user_search_cache, set_simple_cache
-from ..services.ai_service import generate_tags, explain_code_snippet, chat_with_notes, fix_code_snippet # <--- Ensure fix_code_snippet is here too
+from ..services.ai_service import generate_tags, explain_code_snippet, chat_with_notes, perform_ai_action
 from ..services.vector_service import get_vector
 import hashlib
+from collections import Counter
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -40,14 +41,35 @@ async def create_note(request: Request, note_data: NoteCreate, current_user: Use
     vector = get_vector(combined_text)
 
     new_note = Note(
-        title=note_data.title, code_snippet=note_data.code_snippet, language=note_data.language,
-        tags=ai_tags, embedding=vector, owner_id=current_user.id
+        title=note_data.title, 
+        code_snippet=note_data.code_snippet, 
+        language=note_data.language,
+        tags=ai_tags, 
+        embedding=vector, 
+        owner_id=current_user.id,
+        project_id=note_data.project_id # <--- ADD THIS LINE
     )
+    
     session.add(new_note)
     session.commit()
     session.refresh(new_note)
     clear_user_search_cache(current_user.id)
     return new_note
+
+# --- NEW: Get All Notes (For My Library) ---
+@router.get("/", response_model=list[NoteRead])
+async def get_all_notes(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    # Sort by: Pinned (True first), then Created At (Newest first)
+    statement = select(Note).where(Note.owner_id == current_user.id).order_by(
+        Note.is_pinned.desc(), 
+        Note.created_at.desc()
+    )
+    results = session.exec(statement).all()
+    return results
+# -------------------------------------------
 
 @router.get("/search/", response_model=list[NoteRead])
 async def search_notes(q: str, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
@@ -66,6 +88,27 @@ async def search_notes(q: str, current_user: User = Depends(get_current_user), s
     
     if clean_results: set_cache(cache_key, clean_results)
     return clean_results
+
+@router.get("/tags/")
+async def get_user_tags(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    # 1. Fetch all tag strings
+    statement = select(Note.tags).where(Note.owner_id == current_user.id)
+    results = session.exec(statement).all()
+    
+    # 2. Count frequencies
+    tag_counter = Counter()
+    for tag_str in results:
+        if tag_str:
+            # Split, strip whitespace, and handle case (Python vs python)
+            tags = [t.strip() for t in tag_str.split(",")] 
+            tag_counter.update(tags)
+            
+    # 3. Return tags sorted by popularity (Most common first)
+    # This ensures the most "useful" filters are always on the left
+    return [tag for tag, count in tag_counter.most_common()]
 
 @router.put("/{note_id}", response_model=NoteRead)
 async def update_note(note_id: str, note_data: NoteCreate, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
@@ -88,6 +131,24 @@ async def update_note(note_id: str, note_data: NoteCreate, current_user: User = 
     session.refresh(note)
     clear_user_search_cache(current_user.id)
     return note
+
+@router.patch("/{note_id}/pin")
+async def toggle_pin(
+    note_id: str, 
+    current_user: User = Depends(get_current_user), 
+    session: Session = Depends(get_session)
+):
+    try: n_uuid = uuid.UUID(note_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid ID")
+
+    note = session.get(Note, n_uuid)
+    if not note or note.owner_id != current_user.id: 
+        raise HTTPException(status_code=404, detail="Not found")
+
+    note.is_pinned = not note.is_pinned # Toggle
+    session.add(note)
+    session.commit()
+    return {"message": "Toggled", "is_pinned": note.is_pinned}
 
 @router.delete("/{note_id}")
 async def delete_note(note_id: str, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
@@ -114,7 +175,6 @@ async def explain_note(request: Request, body: ExplainRequest, current_user: Use
     set_simple_cache(cache_key, response_data)
     return response_data
 
-# FIX: Added the Chat RAG Endpoint
 @router.post("/chat/")
 @limiter.limit("10/minute")
 async def chat_rag(request: Request, body: ChatRequest, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
@@ -144,9 +204,33 @@ async def fix_code(
     body: FixRequest,
     current_user: User = Depends(get_current_user)
 ):
-    # We identify the user for rate limiting
     request.state.user = current_user 
     
-    print("🔧 AI is fixing your code...")
-    fixed_code = fix_code_snippet(body.code_snippet, body.language, body.error_message)
-    return {"fixed_code": fixed_code}
+    # 1. Generate Cache Key (Fingerprint)
+    # Unique per code content + language + action type
+    raw_data = f"{body.code_snippet}-{body.language}-{body.action}"
+    snippet_hash = hashlib.md5(raw_data.encode()).hexdigest()
+    cache_key = f"fix:{snippet_hash}"
+
+    # 2. Check Cache
+    cached_result = get_cache(cache_key)
+    if cached_result: 
+        print(f"⚡ Serving {body.action} result from Cache")
+        return cached_result
+
+    print(f"🔧 AI is running action: {body.action}...")
+    
+    # 3. Call AI Service
+    result_code = perform_ai_action(
+        body.code_snippet, 
+        body.language, 
+        body.action, 
+        body.error_message
+    )
+    
+    response_data = {"fixed_code": result_code}
+    
+    # 4. Save to Cache
+    set_simple_cache(cache_key, response_data)
+    
+    return response_data

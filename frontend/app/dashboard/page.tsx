@@ -1,96 +1,122 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Separator } from "@/components/ui/separator";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import NoteLibrary from "@/components/NoteLibrary";
 import NoteCreator from "@/components/NoteCreator";
-import SearchBar from "@/components/SearchBar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ChatInterface from "@/components/ChatInterface"; // <--- NEW IMPORT
+import ChatInterface from "@/components/ChatInterface";
 
-export default function Dashboard() {
-  const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
-  
-  // 1. STATE FOR TABS AND EDITING
-  const [activeTab, setActiveTab] = useState("search");
-  const [noteToEdit, setNoteToEdit] = useState<any>(null);
+export default function DashboardPage() {
+  // --- STATE MANAGEMENT ---
+  const [activeTab, setActiveTab] = useState("library");
+  const [currentProject, setCurrentProject] = useState<any>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [editingNote, setEditingNote] = useState<any>(null);
 
-  useEffect(() => {
-    const savedToken = Cookies.get("token");
-    if (!savedToken) router.push("/");
-    else setToken(savedToken);
-  }, [router]);
-
-  // 2. FUNCTION TO HANDLE EDIT CLICK
-  const handleEditRequest = (note: any) => {
-    setNoteToEdit(note);   // Load the data
-    setActiveTab("create"); // Switch the view
+  // --- CONTENT SWITCHER ---
+  const renderContent = () => {
+    switch (activeTab) {
+      case "create":
+        return (
+          <NoteCreator
+            initialData={editingNote}
+            onSuccess={() => {
+              setEditingNote(null); // Clear editing state after save
+              setActiveTab("library");
+            }}
+          />
+        );
+      case "chat":
+        return <ChatInterface sessionId={currentSessionId} />;
+      case "library":
+      default:
+        return (
+          <NoteLibrary
+            projectId={currentProject?.id} // <--- PASS THE PROJECT ID HERE
+            onEdit={(note) => {
+              setEditingNote(note);
+              setActiveTab("create");
+            }}
+          />
+        );
+    }
   };
 
-  // 3. FUNCTION WHEN SAVE IS COMPLETE
-  const handleSaveComplete = () => {
-    setNoteToEdit(null);   // Clear the editor
-    setActiveTab("search"); // Go back to results to see the update
+  // --- HANDLERS ---
+  const handleSelectProject = (project: any) => {
+    setCurrentProject(project);
+    setActiveTab("library");
+    // In a real app, you would pass 'project.id' to NoteLibrary to filter the list
   };
 
-  if (!token) return <div className="p-10 text-white">Loading Security Clearance...</div>;
+  const handleSelectSession = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    setActiveTab("chat");
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white to-zinc-500 bg-clip-text text-transparent">
-              KodaSync Vault
-            </h1>
-            <p className="text-zinc-400 text-sm">Secure AI Knowledge Base</p>
-          </div>
-          <Button 
-            variant="destructive" 
-            size="sm"
-            onClick={() => { Cookies.remove("token"); router.push("/"); }}
-          >
-            Logout
-          </Button>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "350px", // Width of the expanded list rail
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onSelectProject={handleSelectProject}
+        onSelectSession={handleSelectSession}
+      />
+
+      <SidebarInset className="bg-black flex flex-col h-screen overflow-hidden">
+        {/* --- TOP HEADER --- */}
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4">
+          <SidebarTrigger className="-ml-1 text-zinc-400 hover:text-white" />
+          <Separator orientation="vertical" className="mr-2 h-4 bg-zinc-800" />
+
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden md:block">
+                <span className="text-zinc-500">KodaSync</span>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block text-zinc-700" />
+              <BreadcrumbItem>
+                <BreadcrumbPage className="text-zinc-200 font-medium">
+                  {/* Dynamic Breadcrumb Title */}
+                  {activeTab === "chat"
+                    ? "AI Chat"
+                    : activeTab === "create"
+                    ? editingNote
+                      ? "Edit Note"
+                      : "Creator Studio"
+                    : currentProject
+                    ? currentProject.name
+                    : "My Library"}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </header>
 
-        {/* CONTROLLED TABS */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-zinc-900 border-zinc-800">
-            <TabsTrigger value="search">🔍 Search Memory</TabsTrigger>
-            <TabsTrigger value="chat">💬 Chat with Brain</TabsTrigger> {/* <--- NEW TRIGGER */}
-            <TabsTrigger value="create">
-              {noteToEdit ? "✏️ Edit Memory" : "➕ Add Knowledge"}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="search">
-            {/* Pass the handleEditRequest function down */}
-            <SearchBar onEdit={handleEditRequest} />
-          </TabsContent>
-
-          {/* <--- NEW CHAT CONTENT ---> */}
-          <TabsContent value="chat">
-            <div className="max-w-4xl mx-auto">
-              <div className="mb-4">
-                <h2 className="text-xl font-bold text-white">Neural Chat</h2>
-                <p className="text-zinc-400 text-sm">Ask questions based on your saved knowledge base.</p>
-              </div>
-              <ChatInterface />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="create">
-            {/* Pass the noteToEdit data and the success callback */}
-            <NoteCreator 
-              initialData={noteToEdit} 
-              onSuccess={handleSaveComplete}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+        {/* --- MAIN WORKSPACE --- */}
+        <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+          <div className="max-w-7xl mx-auto h-full">{renderContent()}</div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from .routers import auth, notes
+# FIX: Import chat and projects
+from .routers import auth, notes, chat, projects 
 from .database import init_db
 from .limiter import limiter
 from slowapi.errors import RateLimitExceeded
@@ -12,7 +13,7 @@ app = FastAPI(title="KodaSync API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, lambda r, e: JSONResponse(status_code=429, content={"detail": "Too many requests. Slow down!"}))
 
-# 2. GLOBAL Error Handler (Prevents crashes)
+# 2. GLOBAL Error Handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"🔥 CRITICAL ERROR: {exc}") 
@@ -21,8 +22,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal Server Error"},
     )
 
-# 3. CORS SECURITY (The Fix for 'Network Error')
-# We explicitly allow localhost:3000 to send requests
+# 3. CORS SECURITY
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -32,8 +32,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins, 
     allow_credentials=True,
-    allow_methods=["*"], # Allow GET, POST, PUT, DELETE, OPTIONS
-    allow_headers=["*"], # Allow Authorization headers (Tokens)
+    allow_methods=["*"], 
+    allow_headers=["*"], 
 )
 
 @app.on_event("startup")
@@ -43,6 +43,8 @@ def on_startup():
 # 4. Register Routes
 app.include_router(auth.router)
 app.include_router(notes.router)
+app.include_router(chat.router)     # <--- Added
+app.include_router(projects.router) # <--- Added
 
 @app.get("/")
 def read_root():

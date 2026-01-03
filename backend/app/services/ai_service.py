@@ -1,4 +1,5 @@
 import os
+import re # <--- Required for cleaning output
 from groq import Groq
 
 client = Groq(
@@ -7,7 +8,9 @@ client = Groq(
 
 def generate_tags(code_snippet: str, language: str):
     try:
-        prompt = f"Analyze the code snippet. The user claims it is {language}. If it is, generate technical tags. If it is NOT {language}, tag the actual language found. Return ONLY a comma-separated list of strings."
+        # FIX: Added "Limit to maximum 5 specific tags" constraint
+        prompt = f"Analyze the code snippet. The user claims it is {language}. If it is, generate technical tags. If it is NOT {language}, tag the actual language found. Return ONLY a comma-separated list of strings. Limit to maximum 5 most relevant tags."
+        
         chat_completion = client.chat.completions.create(
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
             model="llama-3.3-70b-versatile",
@@ -29,27 +32,31 @@ def explain_code_snippet(code_snippet: str, language: str):
         print(f"Error generating explanation: {e}")
         return "AI could not generate an explanation at this time."
 
-# FIX: Added the Chat Logic here
-def chat_with_notes(context: str, question: str):
+def chat_with_notes(context: str, question: str, history: list = []):
+    """
+    Context-Aware Chat with History support
+    """
     try:
-        prompt = f"""
-        You are a highly intelligent coding assistant called KodaSync.
-        You have access to the user's personal codebase notes.
+        system_prompt = f"""
+        You are KodaSync, an intelligent coding assistant.
         
-        Here is the relevant context from the user's notes:
+        Context from User's Knowledge Base:
         ----------------
         {context}
         ----------------
-
+        
         Instructions:
-        1. Answer the user's question based PRIMARILY on the context provided above.
-        2. If the context contains code, reference it explicitly.
-        3. If the answer is not in the context, use your general coding knowledge to help.
-        4. Be concise and professional. Use Markdown.
+        1. Use the Context above to answer.
+        2. If the context is empty, use your general knowledge.
+        3. Be concise and helpful.
         """
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history) # Append conversation history
+        messages.append({"role": "user", "content": question})
         
         chat_completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
+            messages=messages,
             model="llama-3.3-70b-versatile",
             temperature=0.5,
         )
@@ -58,30 +65,43 @@ def chat_with_notes(context: str, question: str):
         print(f"Error generating chat response: {e}")
         return "I'm having trouble connecting to your brain right now."
 
-def fix_code_snippet(code_snippet: str, language: str, error_msg: str = ""):
+# FIX: Replaced 'fix_code_snippet' with the smarter 'perform_ai_action'
+def perform_ai_action(code_snippet: str, language: str, action: str = "fix", error_msg: str = ""):
     """
-    Analyzes broken code and returns the FIXED version.
+    Executes a specific AI engineering task and cleans the output.
+    Actions: 'fix', 'secure', 'document', 'optimize', 'test'
     """
-    try:
-        prompt = f"""
-        You are a Senior Engineer. The user has {language} code that may be broken or unoptimized.
-        
-        User's Code:
-        {code_snippet}
-        
-        User's Error (Optional): {error_msg}
+    
+    # 1. Define Persona Prompts
+    prompts = {
+        "fix": f"You are a Senior Debugger. Fix bugs in this {language} code. Return ONLY the code. Context: {error_msg}",
+        "secure": f"You are a Security Expert. Patch vulnerabilities (SQLi, XSS, etc) in this {language} code. Return ONLY the code.",
+        "document": f"You are a Tech Writer. Add docstrings/comments to this {language} code. Return ONLY the code.",
+        "optimize": f"You are a Performance Engineer. Optimize this {language} code. Return ONLY the code.",
+        "test": f"You are a QA Engineer. Write Unit Tests for this {language} code. Return ONLY the code."
+    }
 
-        Task:
-        1. Fix any bugs.
-        2. Optimize performance if possible.
-        3. Return ONLY the fixed code block. Do not add conversational filler.
-        """
-        
+    system_prompt = prompts.get(action, prompts["fix"])
+
+    try:
         chat_completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": prompt}],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": code_snippet}
+            ],
             model="llama-3.3-70b-versatile",
+            temperature=0.2, # Low temperature for code precision
         )
-        return chat_completion.choices[0].message.content
+        
+        raw_content = chat_completion.choices[0].message.content
+        
+        # --- CLEANING LOGIC ---
+        # Removes ```python and ``` backticks so the output is pure code
+        clean_content = re.sub(r"```[a-zA-Z]*\n", "", raw_content) 
+        clean_content = re.sub(r"```", "", clean_content)          
+        
+        return clean_content.strip()
+
     except Exception as e:
-        print(f"Error fixing code: {e}")
-        return "Could not generate a fix."
+        print(f"Error in AI Action ({action}): {e}")
+        return f"// Error: Could not perform {action}."

@@ -6,7 +6,14 @@ import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 export default function AuthPage() {
@@ -27,40 +34,48 @@ export default function AuthPage() {
     try {
       if (isLogin) {
         // --- LOGIN LOGIC ---
-        const formData = new FormData();
-        formData.append("username", email);
-        formData.append("password", password);
+        // 1. Create URLSearchParams (Required for OAuth2 Form Data)
+        const params = new URLSearchParams();
+        params.append("username", email); // Note: Backend expects 'username', not 'email'
+        params.append("password", password);
 
-        const response = await axios.post("http://localhost:8000/auth/login", formData, {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
+        // 2. Send Request
+        const response = await axios.post(
+          "http://localhost:8000/auth/login",
+          params,
+          {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          }
+        );
 
+        // 3. Success
         Cookies.set("token", response.data.access_token, { expires: 1 });
         router.push("/dashboard");
-
       } else {
         // --- SIGN UP LOGIC ---
         await axios.post("http://localhost:8000/auth/signup", {
           email,
-          password
+          password,
         });
-        
-        setSuccessMsg("Account created! Logging you in...");
-        
-        // Auto-login after signup
-        setIsLogin(true); 
-        // We trigger the login logic immediately or let user click login. 
-        // For simplicity, let's just switch them to login view and show success.
-        setLoading(false);
-        return; 
-      }
 
+        setSuccessMsg("Account created! Logging you in...");
+        setIsLogin(true);
+        setLoading(false);
+        return;
+      }
     } catch (err: any) {
-      console.error(err);
-      if (isLogin) {
-        setError("Invalid email or password.");
+      // FIX: Don't log "expected" errors like wrong password (400)
+      if (err.response && err.response.status === 400) {
+        // Just show the UI error, keep console clean
+        if (isLogin) {
+          setError("Invalid email or password.");
+        } else {
+          setError(err.response.data.detail || "Account creation failed.");
+        }
       } else {
-        setError(err.response?.data?.detail || "Failed to create account.");
+        // Log unexpected errors (Server down, Network issues)
+        console.error("Authentication Error:", err);
+        setError("Something went wrong. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -75,8 +90,8 @@ export default function AuthPage() {
             {isLogin ? "KodaSync Login" : "Join KodaSync"}
           </CardTitle>
           <CardDescription className="text-center text-zinc-400">
-            {isLogin 
-              ? "Enter your credentials to access your Second Brain." 
+            {isLogin
+              ? "Enter your credentials to access your Second Brain."
               : "Create a secure account to start syncing knowledge."}
           </CardDescription>
         </CardHeader>
@@ -84,9 +99,9 @@ export default function AuthPage() {
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
+              <Input
+                id="email"
+                type="email"
                 placeholder="user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -96,31 +111,49 @@ export default function AuthPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                type="password" 
+              <Input
+                id="password"
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="bg-zinc-800 border-zinc-700 text-white"
                 required
               />
             </div>
-            
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-            {successMsg && <p className="text-green-500 text-sm text-center">{successMsg}</p>}
 
-            <Button type="submit" className="w-full bg-white text-black hover:bg-zinc-200" disabled={loading}>
-              {loading ? "Connecting..." : (isLogin ? "Sign In" : "Create Account")}
+            {error && (
+              <p className="text-red-500 text-sm text-center">{error}</p>
+            )}
+            {successMsg && (
+              <p className="text-green-500 text-sm text-center">{successMsg}</p>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full bg-white text-black hover:bg-zinc-200"
+              disabled={loading}
+            >
+              {loading
+                ? "Connecting..."
+                : isLogin
+                ? "Sign In"
+                : "Create Account"}
             </Button>
           </form>
         </CardContent>
-        
+
         <CardFooter className="flex justify-center border-t border-zinc-800 pt-6">
-          <button 
-            onClick={() => { setIsLogin(!isLogin); setError(""); setSuccessMsg(""); }}
+          <button
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError("");
+              setSuccessMsg("");
+            }}
             className="text-sm text-zinc-500 hover:text-white transition-colors underline"
           >
-            {isLogin ? "Need an account? Sign Up" : "Already have an account? Login"}
+            {isLogin
+              ? "Need an account? Sign Up"
+              : "Already have an account? Login"}
           </button>
         </CardFooter>
       </Card>

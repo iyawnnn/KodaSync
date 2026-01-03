@@ -1,0 +1,58 @@
+name: KodaSync CI
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: kodasync_db
+        ports:
+          - 5432:5432
+        # Health check to ensure DB is ready before tests start
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install httpx pytest pydantic-settings
+
+    - name: Run Integration Tests
+      env:
+        # We inject test config here
+        DATABASE_URL: postgresql://user:password@localhost:5432/kodasync_db
+        REDIS_URL: redis://localhost:6379/0
+        SECRET_KEY: "ci_testing_secret_key"
+        GROQ_API_KEY: "mock_key" # The tests now Mock this, so any string works
+      run: |
+        cd backend
+        python -m pytest tests/test_api.py
