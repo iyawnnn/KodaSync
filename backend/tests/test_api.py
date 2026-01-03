@@ -1,14 +1,14 @@
+import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
-from sqlmodel import Session, create_engine, select, SQLModel
+# FIX: Import 'text' to run raw SQL
+from sqlmodel import Session, create_engine, select, SQLModel, text
 from app.main import app
-# FIX 1: Import all models so SQLModel knows what tables to create
 from app.models import User, Note, ChatMessage, ChatSession, Project
 from app.services.auth_service import get_password_hash
 from app.config import settings
 import uuid
-import pytest
 import time
-from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -35,7 +35,14 @@ def create_test_user(session: Session):
 def auth_headers_fixture():
     engine = get_test_engine()
     
-    # FIX 2: Create Tables! (This was missing, causing the CI error)
+    # --- FIX START: Enable pgvector extension ---
+    # This is required because CI creates a fresh DB that doesn't have it enabled yet
+    with Session(engine) as session:
+        session.exec(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        session.commit()
+    # --- FIX END ---
+
+    # Now we can safely create tables containing Vector columns
     SQLModel.metadata.create_all(engine)
     
     with Session(engine) as session:
@@ -47,7 +54,7 @@ def auth_headers_fixture():
         from app.routers.notes import get_current_user
         app.dependency_overrides[get_current_user] = lambda: user
         
-        yield user # <--- Run the test
+        yield user 
         
         # C. CLEANUP
         app.dependency_overrides = {}
@@ -55,23 +62,18 @@ def auth_headers_fixture():
         user_to_delete = session.get(User, user.id)
         if user_to_delete:
             # 1. Delete Notes
-            notes_stmt = select(Note).where(Note.owner_id == user.id)
-            for note in session.exec(notes_stmt).all():
-                session.delete(note)
+            notes = session.exec(select(Note).where(Note.owner_id == user.id)).all()
+            for note in notes: session.delete(note)
 
-            # 2. Delete Projects (New dependency)
-            proj_stmt = select(Project).where(Project.owner_id == user.id)
-            for proj in session.exec(proj_stmt).all():
-                session.delete(proj)
+            # 2. Delete Projects
+            projects = session.exec(select(Project).where(Project.owner_id == user.id)).all()
+            for proj in projects: session.delete(proj)
 
-            # 3. Delete Chat Sessions (FIX 3: Delete Sessions, not Messages directly)
-            # ChatMessage has no user_id, but ChatSession does. 
-            # Deleting Session automatically deletes Messages (Cascade).
-            sess_stmt = select(ChatSession).where(ChatSession.user_id == user.id)
-            for chat_session in session.exec(sess_stmt).all():
-                session.delete(chat_session)
+            # 3. Delete Chat Sessions
+            sessions = session.exec(select(ChatSession).where(ChatSession.user_id == user.id)).all()
+            for s in sessions: session.delete(s)
             
-            # 4. Now safely delete the user
+            # 4. Delete User
             session.delete(user_to_delete)
             session.commit()
 
@@ -116,20 +118,20 @@ def test_delete_lifecycle(auth_headers):
     assert del_res.status_code == 200
     assert del_res.json() == {"message": "Deleted"} 
 
-# FIX 4: Mock AI so tests don't fail without API Key in CI
+# Mock AI so tests don't fail without API Key
 @patch("app.routers.notes.perform_ai_action")
 def test_auto_fix_endpoint(mock_ai, auth_headers):
     mock_ai.return_value = "def add(a,b): return a+b"
     
     payload = {
-        "code_snippet": "def add(a,b): return a+b", 
+        "code_snippet": "def add(a,b) return a+b", 
         "language": "python"
     }
     response = client.post("/notes/fix/", json=payload)
     assert response.status_code == 200
     assert "fixed_code" in response.json()
 
-# FIX 5: Mock Chat and use Sessions
+# Mock Chat
 @patch("app.routers.chat.chat_with_notes")
 def test_chat_rag(mock_chat, auth_headers):
     mock_chat.return_value = "The Key is TEST-123-ABC"
@@ -151,7 +153,7 @@ def test_chat_rag(mock_chat, auth_headers):
     answer = response.json()["reply"]
     assert len(answer) > 0
 
-# FIX 6: Update Memory Test for Sessions
+# Update Memory Test
 def test_chat_memory(auth_headers):
     # 1. Create Session
     sess_res = client.post("/chat/sessions")
@@ -164,5 +166,4 @@ def test_chat_memory(auth_headers):
     hist_res = client.get(f"/chat/sessions/{session_id}/messages")
     assert hist_res.status_code == 200
     msgs = hist_res.json()
-    # Should have at least the user message
     assert len(msgs) >= 1
