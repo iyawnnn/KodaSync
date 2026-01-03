@@ -1,19 +1,16 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, create_engine, select, SQLModel, text
 from app.main import app
-# Import all models to ensure tables are registered
 from app.models import User, Note, ChatMessage, ChatSession, Project
 from app.services.auth_service import get_password_hash
 from app.config import settings
 import uuid
 import pytest
-import time
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 client = TestClient(app)
 
 def get_test_engine():
-    # Use the Env Var URL forced in the workflow
     return create_engine(settings.DATABASE_URL)
 
 def create_test_user(session: Session):
@@ -29,17 +26,30 @@ def create_test_user(session: Session):
     session.refresh(user)
     return user
 
+# --- FIX 1: GLOBAL REDIS MOCK ---
+@pytest.fixture(autouse=True)
+def mock_redis():
+    """
+    Automatically mock Redis for ALL tests.
+    This prevents 'ConnectionError' and makes tests faster.
+    """
+    with patch("app.services.cache_service.redis_client") as mock:
+        # Mock scan_iter to return an empty list (found no keys)
+        mock.scan_iter.return_value = []
+        # Mock get to return None (cache miss)
+        mock.get.return_value = None
+        yield mock
+
 @pytest.fixture(name="auth_headers")
 def auth_headers_fixture():
     engine = get_test_engine()
     
-    # 1. FIX: Force Enable Vector Extension
-    # GitHub Actions creates a blank DB, so we must enable extensions manually
+    # 2. Enable Vector Extension (Crucial for CI)
     with Session(engine) as session:
         session.exec(text("CREATE EXTENSION IF NOT EXISTS vector"))
         session.commit()
 
-    # 2. Create Tables
+    # 3. Create Tables
     SQLModel.metadata.create_all(engine)
     
     with Session(engine) as session:
@@ -121,9 +131,13 @@ def test_chat_rag(mock_chat, auth_headers):
     assert response.json()["reply"] == "Mock Answer"
 
 def test_chat_memory(auth_headers):
-    sess_res = client.post("/chat/sessions")
-    session_id = sess_res.json()["id"]
-    
-    client.post(f"/chat/{session_id}", json={"message": "Test"})
-    hist_res = client.get(f"/chat/sessions/{session_id}/messages")
-    assert len(hist_res.json()) >= 1
+    # Mock AI response here specifically to avoid API calls
+    with patch("app.routers.chat.chat_with_notes") as mock_chat:
+        mock_chat.return_value = "Memory Answer"
+        
+        sess_res = client.post("/chat/sessions")
+        session_id = sess_res.json()["id"]
+        
+        client.post(f"/chat/{session_id}", json={"message": "Test"})
+        hist_res = client.get(f"/chat/sessions/{session_id}/messages")
+        assert len(hist_res.json()) >= 1
