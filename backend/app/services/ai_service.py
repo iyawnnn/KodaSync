@@ -1,16 +1,53 @@
 import os
+import re 
 from groq import Groq
 
 client = Groq(
     api_key=os.environ.get("GROQ_API_KEY"),
 )
 
+MODEL_SMART = "llama-3.3-70b-versatile" 
+MODEL_FAST = "llama-3.1-8b-instant"
+
+# --- 🧠 DYNAMIC SYSTEM PROMPT ---
+def get_adaptive_system_prompt(context_str: str, project_name: str = None):
+    # If a project is selected, we inject it into the identity
+    project_context = f"You are working on the project: '{project_name}'." if project_name else "You are acting as a General Technical Consultant."
+
+    return f"""
+    ### IDENTITY
+    You are KodaSync, an Elite Principal Software Architect.
+    {project_context}
+    
+    ### KNOWLEDGE BASE (CONTEXT)
+    {context_str}
+    
+    ### BEHAVIORAL PRINCIPLES
+    1. **Adapt to Intent:**
+       - **Quick Fix/Snippet:** Provide code immediately. Minimal text.
+       - **Concept Explanation:** Use structure, analogies, and clear sections.
+       - **Comparison:** STRICTLY use a **Markdown Table** to compare features.
+       
+    2. **Professional Tone:**
+       - High-signal, low-noise. No conversational filler.
+       - No emojis. 
+       
+    3. **Coding Standards:**
+       - Production-ready, Clean, DRY.
+       - Modern syntax.
+       
+    4. **Formatting:**
+       - Use headers naturally.
+       - For lists of 3+ items, use bullet points.
+       - For pros/cons or comparisons, use Tables.
+    """
+
 def generate_tags(code_snippet: str, language: str):
     try:
-        prompt = f"Analyze the code snippet. The user claims it is {language}. If it is, generate technical tags. If it is NOT {language}, tag the actual language found. Return ONLY a comma-separated list of strings."
+        prompt = "Analyze the code. Return ONLY a comma-separated list of 3-5 technical tags."
         chat_completion = client.chat.completions.create(
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
-            model="llama-3.3-70b-versatile",
+            model=MODEL_FAST,
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -19,69 +56,81 @@ def generate_tags(code_snippet: str, language: str):
     
 def explain_code_snippet(code_snippet: str, language: str):
     try:
-        prompt = f"You are a Senior Developer. Explain this {language} code to a junior developer. Be concise. Break it down step-by-step. Use markdown formatting."
+        prompt = "You are a Senior Engineer. Explain this code clearly to a colleague. Be concise."
         chat_completion = client.chat.completions.create(
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
-            model="llama-3.3-70b-versatile",
+            model=MODEL_SMART,
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
         print(f"Error generating explanation: {e}")
         return "AI could not generate an explanation at this time."
 
-# FIX: Added the Chat Logic here
-def chat_with_notes(context: str, question: str):
-    try:
-        prompt = f"""
-        You are a highly intelligent coding assistant called KodaSync.
-        You have access to the user's personal codebase notes.
-        
-        Here is the relevant context from the user's notes:
-        ----------------
-        {context}
-        ----------------
-
-        Instructions:
-        1. Answer the user's question based PRIMARILY on the context provided above.
-        2. If the context contains code, reference it explicitly.
-        3. If the answer is not in the context, use your general coding knowledge to help.
-        4. Be concise and professional. Use Markdown.
-        """
-        
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
-            model="llama-3.3-70b-versatile",
-            temperature=0.5,
-        )
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        print(f"Error generating chat response: {e}")
-        return "I'm having trouble connecting to your brain right now."
-
-def fix_code_snippet(code_snippet: str, language: str, error_msg: str = ""):
+# --- 🚀 THE MAIN CHAT ENGINE ---
+def stream_chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
-    Analyzes broken code and returns the FIXED version.
+    Generator function using the Adaptive System Prompt.
     """
     try:
-        prompt = f"""
-        You are a Senior Engineer. The user has {language} code that may be broken or unoptimized.
-        
-        User's Code:
-        {code_snippet}
-        
-        User's Error (Optional): {error_msg}
+        # Pass project_name to the prompt generator
+        system_prompt = get_adaptive_system_prompt(context, project_name)
 
-        Task:
-        1. Fix any bugs.
-        2. Optimize performance if possible.
-        3. Return ONLY the fixed code block. Do not add conversational filler.
-        """
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": question})
         
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": prompt}],
-            model="llama-3.3-70b-versatile",
+        stream = client.chat.completions.create(
+            messages=messages,
+            model=MODEL_SMART,
+            temperature=0.3, 
+            stream=True 
         )
-        return chat_completion.choices[0].message.content
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
     except Exception as e:
-        print(f"Error fixing code: {e}")
-        return "Could not generate a fix."
+        yield f"\n[System Error: {str(e)}]"
+
+# --- 👇 THE MISSING FUNCTION THAT CAUSED THE ERROR 👇 ---
+def chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
+    """
+    Non-streaming wrapper for backward compatibility.
+    """
+    return "".join(stream_chat_with_notes(context, question, history, project_name))
+
+def perform_ai_action(code_snippet: str, language: str, action: str = "fix", error_msg: str = ""):
+    """
+    Executes specific engineering tasks.
+    """
+    base_instruction = "Return the code in a Markdown block. Follow with a 1-sentence technical summary."
+    
+    prompts = {
+        "fix": f"Fix bugs. Context: {error_msg}. {base_instruction}",
+        "secure": f"Patch vulnerabilities. {base_instruction}",
+        "document": f"Add minimal, high-value docstrings. {base_instruction}",
+        "optimize": f"Optimize complexity. {base_instruction}",
+        "test": f"Write Unit Tests. {base_instruction}"
+    }
+
+    system_prompt = f"""
+    You are an Elite Developer.
+    Task: {prompts.get(action, "Improve code")}
+    Constraint: No conversational filler. Code first.
+    """
+
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": code_snippet}
+            ],
+            model=MODEL_SMART,
+            temperature=0.2, 
+        )
+        return chat_completion.choices[0].message.content.strip()
+
+    except Exception as e:
+        print(f"Error in AI Action ({action}): {e}")
+        return f"// Error: Could not perform {action}."

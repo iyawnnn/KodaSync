@@ -1,129 +1,76 @@
 "use client";
 
-import { useState } from "react";
-import axios from "axios";
-import Cookies from "js-cookie";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { ArrowRight, Code2, BrainCircuit } from "lucide-react";
 
-export default function AuthPage() {
-  const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true); // <--- TOGGLE STATE
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccessMsg("");
-
-    try {
-      if (isLogin) {
-        // --- LOGIN LOGIC ---
-        const formData = new FormData();
-        formData.append("username", email);
-        formData.append("password", password);
-
-        const response = await axios.post("http://localhost:8000/auth/login", formData, {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
-
-        Cookies.set("token", response.data.access_token, { expires: 1 });
-        router.push("/dashboard");
-
-      } else {
-        // --- SIGN UP LOGIC ---
-        await axios.post("http://localhost:8000/auth/signup", {
-          email,
-          password
-        });
-        
-        setSuccessMsg("Account created! Logging you in...");
-        
-        // Auto-login after signup
-        setIsLogin(true); 
-        // We trigger the login logic immediately or let user click login. 
-        // For simplicity, let's just switch them to login view and show success.
-        setLoading(false);
-        return; 
-      }
-
-    } catch (err: any) {
-      console.error(err);
-      if (isLogin) {
-        setError("Invalid email or password.");
-      } else {
-        setError(err.response?.data?.detail || "Failed to create account.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export default function LandingPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black text-white p-4">
-      <Card className="w-full max-w-md border-zinc-800 bg-zinc-900 text-zinc-100">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center font-bold text-white">
-            {isLogin ? "KodaSync Login" : "Join KodaSync"}
-          </CardTitle>
-          <CardDescription className="text-center text-zinc-400">
-            {isLogin 
-              ? "Enter your credentials to access your Second Brain." 
-              : "Create a secure account to start syncing knowledge."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="user@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-white"
-                required
-              />
-            </div>
-            
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-            {successMsg && <p className="text-green-500 text-sm text-center">{successMsg}</p>}
-
-            <Button type="submit" className="w-full bg-white text-black hover:bg-zinc-200" disabled={loading}>
-              {loading ? "Connecting..." : (isLogin ? "Sign In" : "Create Account")}
+    <div className="flex min-h-screen flex-col bg-black text-white selection:bg-blue-500/30">
+      
+      {/* Navbar Placeholder */}
+      <header className="px-6 py-4 flex items-center justify-between border-b border-zinc-800/50">
+        <div className="flex items-center gap-2 font-bold text-xl">
+          <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Code2 className="text-white h-5 w-5" />
+          </div>
+          <span>KodaSync</span>
+        </div>
+        <div className="flex gap-4">
+          <Link href="/auth/login">
+            <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-zinc-800">
+              Log in
             </Button>
-          </form>
-        </CardContent>
+          </Link>
+          <Link href="/auth/signup">
+            <Button className="bg-white text-black hover:bg-zinc-200 font-medium">
+              Sign Up
+            </Button>
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex-1 flex flex-col items-center justify-center text-center px-4 relative overflow-hidden">
         
-        <CardFooter className="flex justify-center border-t border-zinc-800 pt-6">
-          <button 
-            onClick={() => { setIsLogin(!isLogin); setError(""); setSuccessMsg(""); }}
-            className="text-sm text-zinc-500 hover:text-white transition-colors underline"
-          >
-            {isLogin ? "Need an account? Sign Up" : "Already have an account? Login"}
-          </button>
-        </CardFooter>
-      </Card>
+        {/* Background Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="relative z-10 max-w-4xl space-y-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-400 mb-4">
+            <BrainCircuit className="h-3 w-3 text-blue-500" />
+            <span>AI-Powered Second Brain for Developers</span>
+          </div>
+          
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500">
+            Never lose a <br /> snippet again.
+          </h1>
+          
+          <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto">
+            Store, search, and fix your code snippets instantly. 
+            KodaSync uses vector embeddings to understand what your code <em>does</em>, not just what it says.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <Link href="/auth/signup">
+              <Button size="lg" className="h-12 px-8 text-base bg-blue-600 hover:bg-blue-500 text-white rounded-full">
+                Get Started Free
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/auth/login">
+              <Button size="lg" variant="outline" className="h-12 px-8 text-base border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:text-white rounded-full bg-transparent">
+                Existing User?
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-zinc-800/50 py-8 text-center text-zinc-600 text-sm">
+        <p>&copy; 2026 KodaSync Inc. Built for developers.</p>
+      </footer>
     </div>
   );
 }
