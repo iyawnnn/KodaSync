@@ -6,7 +6,7 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/layout/AppSidebar"; 
 import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
@@ -15,18 +15,16 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import NoteLibrary from "@/components/NoteLibrary";
-import NoteCreator from "@/components/NoteCreator";
-import ChatInterface from "@/components/ChatInterface";
+import NoteLibrary from "@/components/notes/NoteLibrary"; 
+import NoteCreator from "@/components/notes/NoteCreator"; 
+import ChatInterface from "@/components/chat/ChatInterface"; 
 
 export default function DashboardPage() {
-  // --- STATE MANAGEMENT ---
   const [activeTab, setActiveTab] = useState("library");
   const [currentProject, setCurrentProject] = useState<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string>("");
   const [editingNote, setEditingNote] = useState<any>(null);
 
-  // --- CONTENT SWITCHER ---
   const renderContent = () => {
     switch (activeTab) {
       case "create":
@@ -34,7 +32,7 @@ export default function DashboardPage() {
           <NoteCreator
             initialData={editingNote}
             onSuccess={() => {
-              setEditingNote(null); // Clear editing state after save
+              setEditingNote(null);
               setActiveTab("library");
             }}
           />
@@ -55,7 +53,6 @@ export default function DashboardPage() {
     }
   };
 
-  // --- HANDLERS ---
   const handleSelectProject = (project: any) => {
     setCurrentProject(project);
     setActiveTab("library");
@@ -68,11 +65,7 @@ export default function DashboardPage() {
 
   return (
     <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "350px", // Width of the expanded list rail
-        } as React.CSSProperties
-      }
+      style={{ "--sidebar-width": "18rem" } as React.CSSProperties}
     >
       <AppSidebar
         activeTab={activeTab}
@@ -81,21 +74,23 @@ export default function DashboardPage() {
         onSelectSession={handleSelectSession}
       />
 
-      <SidebarInset className="bg-black flex flex-col h-screen overflow-hidden">
-        {/* --- TOP HEADER --- */}
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4">
-          <SidebarTrigger className="-ml-1 text-zinc-400 hover:text-white" />
-          <Separator orientation="vertical" className="mr-2 h-4 bg-zinc-800" />
+      <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
+        
+        {/* Header */}
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
+          <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
+          <Separator orientation="vertical" className="mr-2 h-4 bg-border" />
 
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <span className="text-zinc-500">KodaSync</span>
+                <span className="font-bold text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  KodaSync
+                </span>
               </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block text-zinc-700" />
+              <BreadcrumbSeparator className="hidden md:block text-muted-foreground" />
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-zinc-200 font-medium">
-                  {/* Dynamic Breadcrumb Title */}
+                <BreadcrumbPage className="font-semibold text-sm text-foreground">
                   {activeTab === "chat"
                     ? "AI Chat"
                     : activeTab === "create"
@@ -111,8 +106,7 @@ export default function DashboardPage() {
           </Breadcrumb>
         </header>
 
-        {/* --- MAIN WORKSPACE --- */}
-        {/* CRITICAL: overflow-hidden for 'chat' allows the ChatInterface ScrollArea to work */}
+        {/* Content Area */}
         <div
           className={`flex-1 p-6 ${
             activeTab === "chat"
