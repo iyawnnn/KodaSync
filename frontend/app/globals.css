@@ -127,6 +127,36 @@
   }
 }
 
+@layer utilities {
+  /* 1. Set the width */
+  .sidebar-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* 2. Track is always transparent */
+  .sidebar-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 3. Thumb is transparent by default (Hidden) */
+  .sidebar-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 10px;
+    transition: background-color 0.2s ease;
+  }
+
+  /* 4. Thumb becomes Light Grey on Hover */
+  .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: #e4e4e7; /* Zinc-200: Very subtle light grey */
+  }
+
+  /* 5. Thumb gets slightly darker when you grab it */
+  .sidebar-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background: #d4d4d8; /* Zinc-300: Visible grey */
+  }
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
 }

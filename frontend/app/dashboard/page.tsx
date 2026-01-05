@@ -22,7 +22,8 @@ import ChatInterface from "@/components/chat/ChatInterface";
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("library");
   const [currentProject, setCurrentProject] = useState<any>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionTitle, setCurrentSessionTitle] = useState<string>("New Chat");
   const [editingNote, setEditingNote] = useState<any>(null);
 
   const renderContent = () => {
@@ -38,7 +39,7 @@ export default function DashboardPage() {
           />
         );
       case "chat":
-        return <ChatInterface sessionId={currentSessionId} />;
+        return <ChatInterface sessionId={currentSessionId || undefined} />;
       case "library":
       default:
         return (
@@ -58,9 +59,26 @@ export default function DashboardPage() {
     setActiveTab("library");
   };
 
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = (sessionId: string | null, title?: string) => {
     setCurrentSessionId(sessionId);
+    if (title) setCurrentSessionTitle(title);
+    if (sessionId === null) setCurrentSessionTitle("New Chat");
     setActiveTab("chat");
+  };
+
+  const getRootTitle = () => {
+    switch (activeTab) {
+        case "chat": return "AI Chat";
+        case "create": return "Studio";
+        default: return "Library";
+    }
+  }
+
+  const getBreadcrumbTitle = () => {
+    if (activeTab === "chat") return currentSessionTitle;
+    if (activeTab === "create") return editingNote ? editingNote.title : "New Note";
+    if (activeTab === "library") return currentProject ? currentProject.name : "All Notes";
+    return "Dashboard";
   };
 
   return (
@@ -72,6 +90,7 @@ export default function DashboardPage() {
         setActiveTab={setActiveTab}
         onSelectProject={handleSelectProject}
         onSelectSession={handleSelectSession}
+        currentSessionId={currentSessionId}
       />
 
       <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
@@ -85,21 +104,15 @@ export default function DashboardPage() {
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <span className="font-bold text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  KodaSync
+                  {getRootTitle()}
                 </span>
               </BreadcrumbItem>
+              
               <BreadcrumbSeparator className="hidden md:block text-muted-foreground" />
+              
               <BreadcrumbItem>
-                <BreadcrumbPage className="font-semibold text-sm text-foreground">
-                  {activeTab === "chat"
-                    ? "AI Chat"
-                    : activeTab === "create"
-                    ? editingNote
-                      ? "Edit Note"
-                      : "Creator Studio"
-                    : currentProject
-                    ? currentProject.name
-                    : "My Library"}
+                <BreadcrumbPage className="font-semibold text-sm text-foreground capitalize">
+                  {getBreadcrumbTitle()}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -108,7 +121,8 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         <div
-          className={`flex-1 p-6 ${
+          // 🚀 RESPONSIVE UPDATE: p-2 on mobile, p-6 on desktop
+          className={`flex-1 p-2 md:p-6 ${
             activeTab === "chat"
               ? "overflow-hidden"
               : "overflow-y-auto scroll-smooth"

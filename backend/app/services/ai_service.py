@@ -102,21 +102,29 @@ def chat_with_notes(context: str, question: str, history: list = [], project_nam
 
 def perform_ai_action(code_snippet: str, language: str, action: str = "fix", error_msg: str = ""):
     """
-    Executes specific engineering tasks.
+    Executes specific engineering tasks with strict language enforcement.
     """
-    base_instruction = "Return the code in a Markdown block. Follow with a 1-sentence technical summary."
+    # 🚀 KEY FIX: Explicit rules for ambiguous languages like JS
+    language_rules = ""
+    if language.lower() in ["javascript", "typescript", "js", "ts"]:
+        language_rules = "RULE: In JavaScript/TypeScript, replace 'print()' with 'console.log()' unless explicitly asking for window printing."
+
+    base_instruction = f"Return the code in a Markdown block. The code MUST be valid {language}. {language_rules} If the input is in a different language, TRANSLATE it to {language} first."
     
     prompts = {
-        "fix": f"Fix bugs. Context: {error_msg}. {base_instruction}",
-        "secure": f"Patch vulnerabilities. {base_instruction}",
-        "document": f"Add minimal, high-value docstrings. {base_instruction}",
+        "fix": f"Fix bugs and correct syntax. Context: {error_msg}. {base_instruction}",
+        "security": f"Patch vulnerabilities. {base_instruction}",
+        "document": f"Add minimal, high-value docstrings/comments. {base_instruction}",
         "optimize": f"Optimize complexity. {base_instruction}",
-        "test": f"Write Unit Tests. {base_instruction}"
+        "test": f"Write Unit Tests using the standard testing library for {language}. {base_instruction}"
     }
+
+    # ... rest of the function remains the same
+    selected_prompt = prompts.get(action, f"Improve this code. {base_instruction}")
 
     system_prompt = f"""
     You are an Elite Developer.
-    Task: {prompts.get(action, "Improve code")}
+    Task: {selected_prompt}
     Constraint: No conversational filler. Code first.
     """
 
@@ -134,3 +142,28 @@ def perform_ai_action(code_snippet: str, language: str, action: str = "fix", err
     except Exception as e:
         print(f"Error in AI Action ({action}): {e}")
         return f"// Error: Could not perform {action}."
+    
+def generate_chat_title(first_message: str):
+    """
+    Generates a short, 3-5 word title for the chat based on the first message.
+    """
+    try:
+        completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant. Generate a concise label (3-5 words max) for a chat that starts with the user's message. Do not use quotes. Do not say 'Title:'. Just the text."
+                },
+                {
+                    "role": "user",
+                    "content": first_message
+                }
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=20,
+        )
+        return completion.choices[0].message.content.strip().strip('"')
+    except Exception as e:
+        print(f"Title generation failed: {e}")
+        return "New Chat"

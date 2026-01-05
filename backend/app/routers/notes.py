@@ -3,6 +3,7 @@ import uuid
 import hashlib
 from collections import Counter
 from typing import Optional, List
+from datetime import datetime
 
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -24,7 +25,6 @@ from ..services.cache_service import (
 from ..services.ai_service import (
     generate_tags,
     explain_code_snippet,
-    chat_with_notes,
     perform_ai_action,
 )
 from ..services.vector_service import get_vector
@@ -39,6 +39,7 @@ router = APIRouter(prefix="/notes", tags=["Notes"])
 class UrlImportRequest(BaseModel):
     url: str
     project_id: Optional[str] = None
+    save: bool = True  # 🚀 Added Flag (Default True)
 
 
 # --- Dependency ---
@@ -104,29 +105,43 @@ async def import_note_from_url(
     if not data:
         raise HTTPException(status_code=400, detail="Could not scrape that URL")
 
-    # 2. Vectorize (Synchronous for immediate searchability)
-    vector = get_vector(data["content"])
+    # 2. Logic Split: Save vs. Fetch Only
+    if body.save:
+        # A. SAVE TO DATABASE
+        vector = get_vector(data["content"])
+        new_note = Note(
+            title=f"Imported: {data['title']}",
+            content=data["content"],
+            code_snippet=data["content"],
+            language=data["language"],
+            tags="imported,documentation",
+            owner_id=current_user.id,
+            project_id=uuid.UUID(body.project_id) if body.project_id else None,
+            embedding=vector,
+        )
 
-    # 3. Create Note
-    new_note = Note(
-        title=f"Imported: {data['title']}",
-        content=data["content"],
-        # 🚀 FIXED: Removed the limit. Now captures full files.
-        code_snippet=data["content"], 
-        language=data["language"],
-        tags="imported,documentation",
-        owner_id=current_user.id,
-        project_id=uuid.UUID(body.project_id) if body.project_id else None,
-        embedding=vector,
-    )
+        session.add(new_note)
+        session.commit()
+        session.refresh(new_note)
+        clear_user_search_cache(current_user.id)
+        return new_note
 
-    session.add(new_note)
-    session.commit()
-    session.refresh(new_note)
-
-    clear_user_search_cache(current_user.id)
-
-    return new_note
+    else:
+        # B. FETCH ONLY (Chat Context) - Return Transient Object
+        # We manually construct a response matching the NoteRead schema
+        return NoteRead(
+            id=uuid.uuid4(),  # Temporary ID
+            title=data['title'] or "Fetched Snippet",
+            content=data["content"],
+            code_snippet=data["content"],
+            language=data["language"],
+            tags="transient",
+            is_pinned=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            owner_id=current_user.id,
+            project_id=uuid.UUID(body.project_id) if body.project_id else None
+        )
 
 
 # --- Standard Endpoints ---

@@ -10,13 +10,7 @@ class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(unique=True, index=True)
     password_hash: str
-    
-    # --- NEW: Store Refresh Token ---
-    # We store it to validate/revoke it. 
-    # In a real app, you might hash this too, but for V1 storing the string is okay
-    # provided your DB is secure.
     refresh_token: Optional[str] = None 
-    
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     notes: List["Note"] = Relationship(back_populates="owner")
@@ -27,6 +21,8 @@ class Project(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
     description: Optional[str] = None
+    # 🚀 NEW: Pinned field
+    is_pinned: bool = Field(default=False) 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     owner_id: uuid.UUID = Field(foreign_key="users.id")
     owner: User = Relationship(back_populates="projects")
