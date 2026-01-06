@@ -8,7 +8,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  /* New KodaSync Font */
   --font-kodaSync: var(--font-kodaSync);
   
   --color-sidebar-ring: var(--sidebar-ring);
@@ -125,35 +124,67 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* 🚀 GENERIC POINTER ENFORCEMENT */
+  button, 
+  a, 
+  summary,
+  input[type="button"], 
+  input[type="submit"], 
+  input[type="reset"], 
+  label[for] {
+    @apply cursor-pointer;
+  }
+
+  /* 🚀 SHADCN/RADIX UI OVERRIDES 
+     Using !important because these components have inline 'cursor-default' classes 
+     that override standard CSS rules.
+  */
+  [role="button"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="tab"],
+  [role="switch"],
+  [role="checkbox"],
+  [data-radix-collection-item] {
+    cursor: pointer !important;
+  }
+
+  /* Explicit classes if needed */
+  .cursor-pointer,
+  .group.cursor-pointer,
+  .hover\:cursor-pointer:hover {
+    cursor: pointer !important;
+  }
+
+  /* Correct disabled state - MUST be last to override the pointers above */
+  :disabled, 
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed !important;
+  }
 }
 
 @layer utilities {
-  /* 1. Set the width */
   .sidebar-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-
-  /* 2. Track is always transparent */
   .sidebar-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
-
-  /* 3. Thumb is transparent by default (Hidden) */
   .sidebar-scrollbar::-webkit-scrollbar-thumb {
     background: transparent;
     border-radius: 10px;
     transition: background-color 0.2s ease;
   }
-
-  /* 4. Thumb becomes Light Grey on Hover */
   .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: #e4e4e7; /* Zinc-200: Very subtle light grey */
+    background: #e4e4e7;
   }
-
-  /* 5. Thumb gets slightly darker when you grab it */
   .sidebar-scrollbar:hover::-webkit-scrollbar-thumb:hover {
-    background: #d4d4d8; /* Zinc-300: Visible grey */
+    background: #d4d4d8;
   }
 }
 

@@ -16,7 +16,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import NoteLibrary from "@/components/notes/NoteLibrary"; 
-import NoteCreator from "@/components/notes/NoteCreator"; 
+import StudioCreator from "@/components/notes/StudioCreator"; 
 import ChatInterface from "@/components/chat/ChatInterface"; 
 
 export default function DashboardPage() {
@@ -30,12 +30,15 @@ export default function DashboardPage() {
     switch (activeTab) {
       case "create":
         return (
-          <NoteCreator
+          <StudioCreator
             initialData={editingNote}
             onSuccess={() => {
-              setEditingNote(null);
-              setActiveTab("library");
+              // Optional: keep editing or clear. Usually for Studio, we keep it open.
+              // If you want to go back to library on save, uncomment next lines:
+              // setEditingNote(null);
+              // setActiveTab("library");
             }}
+            currentProjectId={currentProject?.id}
           />
         );
       case "chat":
@@ -66,6 +69,12 @@ export default function DashboardPage() {
     setActiveTab("chat");
   };
 
+  // 🚀 NEW: Handler for clicking a Note in the Sidebar
+  const handleSelectNote = (note: any) => {
+    setEditingNote(note); // Load the note data
+    setActiveTab("create"); // Switch to Studio view
+  };
+
   const getRootTitle = () => {
     switch (activeTab) {
         case "chat": return "AI Chat";
@@ -76,7 +85,7 @@ export default function DashboardPage() {
 
   const getBreadcrumbTitle = () => {
     if (activeTab === "chat") return currentSessionTitle;
-    if (activeTab === "create") return editingNote ? editingNote.title : "New Note";
+    if (activeTab === "create") return editingNote ? editingNote.title : "New Document";
     if (activeTab === "library") return currentProject ? currentProject.name : "All Notes";
     return "Dashboard";
   };
@@ -90,6 +99,7 @@ export default function DashboardPage() {
         setActiveTab={setActiveTab}
         onSelectProject={handleSelectProject}
         onSelectSession={handleSelectSession}
+        onSelectNote={handleSelectNote} // 🚀 PASSED PROP
         currentSessionId={currentSessionId}
       />
 
@@ -121,10 +131,9 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         <div
-          // 🚀 RESPONSIVE UPDATE: p-2 on mobile, p-6 on desktop
           className={`flex-1 p-2 md:p-6 ${
-            activeTab === "chat"
-              ? "overflow-hidden"
+            activeTab === "chat" || activeTab === "create"
+              ? "overflow-hidden" // Studio handles its own scrolling
               : "overflow-y-auto scroll-smooth"
           }`}
         >

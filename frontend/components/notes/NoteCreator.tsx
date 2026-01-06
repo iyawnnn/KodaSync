@@ -36,11 +36,10 @@ export default function NoteCreator({
   mode = "full",
   isOpen,
   onOpenChange,
-  // 🚀 NEW PROP
   importMode = "save" 
 }: {
   initialData?: NoteData | null;
-  onSuccess?: (data?: any) => void; // Update type to accept data
+  onSuccess?: (data?: any) => void;
   currentProjectId?: string | null;
   trigger?: ReactNode; 
   defaultTab?: "manual" | "url";
@@ -61,6 +60,7 @@ export default function NoteCreator({
   const [language, setLanguage] = useState("javascript");
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("global");
+  const [wordWrap, setWordWrap] = useState<"on" | "off">("on");
 
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -123,7 +123,6 @@ export default function NoteCreator({
 
   const handleAiAction = async (action: string) => {
     if (!code) return toast.error("Please write some code first!");
-    
     setFixing(true);
     setActiveAction(action);
     setAiCode(null);
@@ -135,13 +134,10 @@ export default function NoteCreator({
         language: language,
         action: action, 
       });
-      
       const rawOutput = response.data.fixed_code;
       const { code: cleanCode, explanation } = cleanAiResponse(rawOutput);
-
       setAiCode(cleanCode);
       if (explanation) setAiExplanation(explanation);
-      
       toast.success(`AI ${action} complete`);
     } catch (error) {
       toast.error("AI could not process request.");
@@ -162,7 +158,6 @@ export default function NoteCreator({
 
   const handleSave = async () => {
     if (!title || !code) return toast.warning("Title and Code required.");
-    
     setLoading(true);
     try {
       const payload = {
@@ -193,101 +188,148 @@ export default function NoteCreator({
 
   const handleUrlSuccess = (data: any) => {
       setLastNote(data);
-      // 🚀 Pass data back to onSuccess so parent can use it (e.g. ChatInterface)
       if (onSuccess) onSuccess(data); 
       if (isModal) setOpen(false);
   }
 
-  // ... (Components like CustomSelect, ManualForm, etc. remain the same) ...
-  // To save space, I'm focusing on where the props are passed.
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-  const CustomSelect = ({ value, onChange, placeholder, options, icon: Icon }: any) => (
+  const FormSelect = ({ value, onChange, placeholder, options, icon: Icon }: any) => (
     <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full bg-secondary/50 h-10 border-transparent focus:ring-1 focus:ring-primary/20 rounded-lg text-sm transition-all hover:bg-secondary/70 shadow-none">
+        <SelectTrigger className="w-full h-9 bg-white border-zinc-200 focus:ring-1 focus:ring-primary/20 rounded-lg text-xs font-medium hover:bg-zinc-50 shadow-sm text-zinc-700">
             <div className="flex items-center gap-2 truncate">
-                {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" />}
+                {Icon && <Icon className="w-3.5 h-3.5 text-zinc-400" />}
                 <SelectValue placeholder={placeholder} />
             </div>
         </SelectTrigger>
-        <SelectContent>{options}</SelectContent>
+        <SelectContent className="z-[9999] border-zinc-200 shadow-lg">{options}</SelectContent>
     </Select>
   );
 
   const ManualForm = (
-    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-        <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground ml-1 uppercase tracking-wider">Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Name your snippet..." className="bg-secondary/50 h-10 border-transparent focus-visible:ring-1 focus-visible:ring-primary/20 rounded-lg text-sm font-medium shadow-none"/>
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="space-y-3">
+            <div className="space-y-1">
+                <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Title</Label>
+                <Input 
+                    value={title} 
+                    onChange={(e) => setTitle(e.target.value)} 
+                    placeholder="Note Title..." 
+                    className="h-9 bg-white border-zinc-200 text-sm font-semibold placeholder:text-zinc-300 focus-visible:ring-primary/20"
+                />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Project</Label>
+                    <FormSelect 
+                        value={selectedProjectId} 
+                        onChange={setSelectedProjectId} 
+                        placeholder="Global" 
+                        icon={FileText} 
+                        options={
+                            <>
+                                <SelectItem value="global">Global</SelectItem>
+                                {projects.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
+                            </>
+                        }
+                    />
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Language</Label>
+                    <FormSelect 
+                        value={language} 
+                        onChange={setLanguage} 
+                        placeholder="Language" 
+                        icon={Code} 
+                        options={
+                            ["javascript","typescript","python","html","css","sql","json","bash","go","java"].map(l => (
+                                <SelectItem key={l} value={l} className="capitalize">{capitalize(l)}</SelectItem>
+                            ))
+                        }
+                    />
+                </div>
+            </div>
         </div>
-        
-        <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground ml-1 uppercase tracking-wider">Project</Label>
-                <CustomSelect value={selectedProjectId} onChange={setSelectedProjectId} placeholder="Global" icon={FileText} options={<><SelectItem value="global">Global (No Project)</SelectItem>{projects.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</>}/>
+
+        <div className="flex flex-col rounded-xl border border-zinc-200 shadow-sm bg-white overflow-hidden h-[320px]">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-100 bg-white">
+                <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Source</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <TooltipProvider delayDuration={0}>
+                        {[
+                            { id: 'fix', icon: Wand2, color: 'text-blue-600', label: 'Fix Code' },
+                            { id: 'document', icon: FileJson, color: 'text-green-600', label: 'Add Docs' },
+                            { id: 'security', icon: ShieldCheck, color: 'text-red-600', label: 'Scan Security' },
+                            { id: 'test', icon: FlaskConical, color: 'text-orange-600', label: 'Gen Tests' },
+                        ].map((tool) => (
+                            <Tooltip key={tool.id}>
+                                <TooltipTrigger asChild>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className={cn("h-7 w-7 rounded-md transition-all hover:bg-zinc-50", fixing && activeAction === tool.id && "bg-primary/5 animate-pulse")} 
+                                        onClick={() => handleAiAction(tool.id)} 
+                                        disabled={fixing}
+                                    >
+                                        {fixing && activeAction === tool.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground"/> : <tool.icon className={cn("w-3.5 h-3.5", tool.color)}/>}
+                                    </Button>
+                                </TooltipTrigger>
+                                {/* 🚀 FIXED: Tooltip style (White bg, Dark text) */}
+                                <TooltipContent className="text-xs bg-white text-zinc-700 border-zinc-200 shadow-md font-medium"><p>{tool.label}</p></TooltipContent>
+                            </Tooltip>
+                        ))}
+                    </TooltipProvider>
+                </div>
             </div>
             
-            <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground ml-1 uppercase tracking-wider">Language</Label>
-                <CustomSelect value={language} onChange={setLanguage} placeholder="Language" icon={Code} options={<><SelectItem value="javascript">JavaScript</SelectItem><SelectItem value="typescript">TypeScript</SelectItem><SelectItem value="python">Python</SelectItem><SelectItem value="html">HTML</SelectItem><SelectItem value="css">CSS</SelectItem><SelectItem value="sql">SQL</SelectItem><SelectItem value="json">JSON</SelectItem><SelectItem value="bash">Bash</SelectItem><SelectItem value="go">Go</SelectItem><SelectItem value="java">Java</SelectItem></>}/>
+            <div className="flex-1 relative">
+                <Editor 
+                    height="100%" 
+                    theme="light" 
+                    language={language} 
+                    value={code} 
+                    onChange={(v) => setCode(v || "")} 
+                    options={{ 
+                        minimap: { enabled: false }, 
+                        fontSize: 13, 
+                        lineHeight: 22, 
+                        padding: { top: 12, bottom: 12 }, 
+                        scrollBeyondLastLine: false, 
+                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace", 
+                        overviewRulerBorder: false, 
+                        hideCursorInOverviewRuler: true, 
+                        renderLineHighlight: "none", 
+                        smoothScrolling: true,
+                        wordWrap: wordWrap 
+                    }} 
+                />
             </div>
         </div>
 
-        <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">Code</Label>
-            <div className="relative rounded-lg overflow-hidden border border-border/40 shadow-sm bg-[#1e1e1e] group">
-                <div className="flex items-center justify-between px-2 py-1.5 bg-[#252526] border-b border-[#3e3e3e]">
-                    <div className="flex gap-1.5 px-2">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <TooltipProvider delayDuration={0}>
-                            {[
-                                { id: 'fix', icon: Wand2, color: 'text-blue-400', label: 'Fix Code' },
-                                { id: 'document', icon: FileJson, color: 'text-green-400', label: 'Add Docs' },
-                                { id: 'security', icon: ShieldCheck, color: 'text-red-400', label: 'Scan Security' },
-                                { id: 'test', icon: FlaskConical, color: 'text-orange-400', label: 'Gen Tests' },
-                            ].map((tool) => (
-                                <Tooltip key={tool.id}>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className={cn("h-7 w-7 hover:bg-[#3e3e3e] rounded-md transition-colors", fixing && activeAction === tool.id && `bg-${tool.color.split('-')[1]}-500/20 ${tool.color}`)} onClick={() => handleAiAction(tool.id)} disabled={fixing}>
-                                            {fixing && activeAction === tool.id ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <tool.icon className={cn("w-3.5 h-3.5", tool.color)}/>}
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="bg-zinc-800 text-zinc-100 border-zinc-700"><p>{tool.label}</p></TooltipContent>
-                                </Tooltip>
-                            ))}
-                        </TooltipProvider>
-                    </div>
-                </div>
-                <Editor height={isModal ? "250px" : "350px"} theme="vs-dark" language={language} value={code} onChange={(v) => setCode(v || "")} options={{ minimap: { enabled: false }, fontSize: 13, lineHeight: 20, padding: { top: 12, bottom: 12 }, scrollBeyondLastLine: false, fontFamily: "'JetBrains Mono', 'Fira Code', monospace", overviewRulerBorder: false, hideCursorInOverviewRuler: true, scrollbar: { vertical: 'visible', horizontal: 'visible', useShadows: false, verticalScrollbarSize: 8, horizontalScrollbarSize: 8 }, renderLineHighlight: "none", smoothScrolling: true }} />
-            </div>
-        </div>
-
-        <Button onClick={handleSave} disabled={loading} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 rounded-lg shadow-sm transition-all font-medium text-sm">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-            {initialData ? "Update Snippet" : "Save Snippet"}
+        <Button onClick={handleSave} disabled={loading} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 rounded-lg shadow-sm transition-all font-semibold text-xs">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <Save className="w-3.5 h-3.5 mr-2" />}
+            {initialData ? "Update Note" : "Save Note"}
         </Button>
     </div>
   );
 
   const ModalContent = (
-    <div className="space-y-4">
+    <div className="space-y-4 h-full">
         {mode === 'full' ? (
              <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-secondary/50 p-1 rounded-lg h-9">
-                    <TabsTrigger value="manual" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md transition-all">Manual Entry</TabsTrigger>
-                    <TabsTrigger value="url" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md transition-all">Import URL</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 bg-zinc-100 p-1 rounded-lg h-9">
+                    <TabsTrigger value="manual" className="text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md transition-all text-zinc-500 data-[state=active]:text-zinc-900">Manual</TabsTrigger>
+                    <TabsTrigger value="url" className="text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md transition-all text-zinc-500 data-[state=active]:text-zinc-900">Import URL</TabsTrigger>
                 </TabsList>
                 <TabsContent value="manual" className="mt-4">{ManualForm}</TabsContent>
-                <TabsContent value="url" className="mt-0">
-                    {/* 🚀 PASS IMPORT MODE */}
+                <TabsContent value="url" className="mt-4">
                     <UrlImportForm 
                         onSuccess={handleUrlSuccess} 
                         projects={projects} 
                         defaultProjectId={selectedProjectId === "global" ? undefined : selectedProjectId} 
-                        importMode={importMode} // Pass Prop
+                        importMode={importMode} 
                     />
                 </TabsContent>
             </Tabs>
@@ -296,63 +338,72 @@ export default function NoteCreator({
                 onSuccess={handleUrlSuccess} 
                 projects={projects} 
                 defaultProjectId={selectedProjectId === "global" ? undefined : selectedProjectId} 
-                importMode={importMode} // Pass Prop
+                importMode={importMode} 
             />
         )}
     </div>
   );
 
-  // ... (Scrollbar Styles and Output Panel remain same) ...
   const CustomScrollbarStyles = () => (
     <style jsx global>{`
       .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 99px; }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 99px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4d4d8; }
     `}</style>
-  );
-
-  const OutputPanel = (
-    <Card className="h-full border-border/50 shadow-none bg-card/50">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 px-0"><CardTitle className="text-sm font-medium flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" />{aiCode ? "AI Analysis" : "Output Preview"}</CardTitle>{aiCode && (<Button size="sm" variant="ghost" onClick={() => setAiCode(null)} className="h-7 text-xs">Clear</Button>)}</CardHeader>
-        <CardContent className="px-0">
-          {aiCode ? (
-            <div className="space-y-4 animate-in fade-in">
-                {aiExplanation && (<div className="p-3 bg-secondary/30 rounded-lg text-xs text-muted-foreground border border-border/50 leading-relaxed"><div className="flex items-center gap-2 mb-1 text-foreground font-semibold"><Info className="w-3.5 h-3.5" /> Note</div>{aiExplanation}</div>)}
-              <div className="relative rounded-xl overflow-hidden border border-zinc-800 shadow-md bg-[#1e1e1e]">
-                <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-zinc-800"><span className="text-[10px] text-primary font-bold uppercase tracking-wider">AI Suggestion</span><Button size="sm" onClick={handleApplyAi} className="h-6 gap-1.5 text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 px-2"><Check className="w-3 h-3" /> Apply</Button></div>
-                <Editor height="300px" theme="vs-dark" language={language} value={aiCode} options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12 }} />
-              </div>
-            </div>
-          ) : lastNote ? (
-            <div className="space-y-4 animate-in fade-in">
-              <div className="p-3 bg-secondary/40 rounded-xl border border-border/50 flex items-center gap-3"><div className="p-2 bg-green-500/10 rounded-full"><Check className="w-4 h-4 text-green-500" /></div><div><Label className="text-muted-foreground text-[10px] uppercase tracking-wider font-bold block">Successfully Saved</Label><div className="font-semibold text-sm truncate text-foreground">{lastNote.title}</div></div></div>
-              <div className="relative rounded-xl overflow-hidden border border-zinc-800 shadow-sm opacity-90 bg-[#1e1e1e]"><Editor height="200px" theme="vs-dark" language={lastNote.language || "javascript"} value={lastNote.code_snippet} options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12 }} /></div>
-            </div>
-          ) : (
-            <div className="flex h-[300px] items-center justify-center text-muted-foreground/40 border-2 border-dashed border-border/40 rounded-xl bg-secondary/5"><div className="text-center space-y-2"><Terminal className="w-8 h-8 mx-auto opacity-30" /><p className="text-xs font-medium">Code preview will appear here.</p></div></div>
-          )}
-        </CardContent>
-    </Card>
   );
 
   if (isModal) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] p-0 gap-0 border-border/50 shadow-2xl bg-background flex flex-col sm:rounded-2xl overflow-hidden outline-none">
+            <DialogContent className="sm:max-w-[550px] max-h-[85vh] p-0 gap-0 border-zinc-200 shadow-2xl bg-white flex flex-col sm:rounded-xl overflow-hidden outline-none">
                 <CustomScrollbarStyles />
-                <div className="px-6 py-5 border-b border-border/50 bg-background sticky top-0 z-10 shrink-0">
-                    <DialogHeader><DialogTitle className="flex items-center gap-3 text-lg font-bold tracking-tight"><div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">{mode === 'url' ? <Globe className="w-4 h-4"/> : <PenTool className="w-4 h-4"/>}</div>{mode === 'url' ? "Import Knowledge" : "Create New Note"}</DialogTitle></DialogHeader>
+                {/* 🚀 FIXED HEADER: Flex between + Close Button */}
+                <div className="px-5 py-4 border-b border-zinc-100 bg-white sticky top-0 z-10 shrink-0 flex items-center justify-between">
+                    <DialogHeader className="p-0">
+                        <DialogTitle className="flex items-center gap-3 text-base font-bold tracking-tight text-zinc-900">
+                            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/10 text-primary">
+                                {mode === 'url' ? <Globe className="w-4 h-4"/> : <PenTool className="w-4 h-4"/>}
+                            </div>
+                            {mode === 'url' ? "Import Knowledge" : "Create Note"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    {/* 🚀 CLOSE BUTTON */}
+                    <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="h-8 w-8 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-full">
+                        <X className="w-4 h-4" />
+                    </Button>
                 </div>
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+
+                <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
                     {ModalContent}
+                    
+                    {/* AI Result Area (Styled Light) */}
                     {aiCode && (
-                        <div ref={aiOutputRef} className="mt-6 pt-6 border-t border-border">
-                             {aiExplanation && (<div className="p-3 bg-secondary/30 rounded-lg text-xs text-muted-foreground border border-border/50 leading-relaxed mb-4"><div className="flex items-center gap-2 mb-1 text-foreground font-semibold"><Info className="w-3.5 h-3.5" /> Note</div>{aiExplanation}</div>)}
-                            <div className="relative rounded-xl overflow-hidden border border-zinc-800 shadow-lg bg-[#1e1e1e]">
-                                <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-zinc-800"><span className="text-[10px] text-primary font-bold uppercase tracking-wider flex items-center gap-2"><Sparkles className="w-3 h-3" /> AI Result</span><div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => setAiCode(null)} className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full"><X className="w-3 h-3" /></Button><Button size="sm" onClick={handleApplyAi} className="h-6 gap-1.5 text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 px-2"><Check className="w-3 h-3" /> Apply Fix</Button></div></div>
-                                <Editor height="200px" theme="vs-dark" language={language} value={aiCode} options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12 }} />
+                        <div ref={aiOutputRef} className="mt-6 pt-6 border-t border-zinc-100">
+                             {aiExplanation && (
+                                <div className="p-3 bg-blue-50/50 rounded-lg text-xs text-zinc-600 border border-blue-100 leading-relaxed mb-4">
+                                    <div className="flex items-center gap-2 mb-1 text-blue-600 font-bold uppercase text-[10px]">
+                                        <Info className="w-3.5 h-3.5" /> Insight
+                                    </div>
+                                    {aiExplanation}
+                                </div>
+                            )}
+                            <div className="flex flex-col rounded-xl border border-zinc-200 shadow-md bg-white overflow-hidden">
+                                <div className="flex items-center justify-between px-3 py-2 bg-zinc-50 border-b border-zinc-200">
+                                    <span className="text-[10px] text-primary font-bold uppercase tracking-wider flex items-center gap-2">
+                                        <Sparkles className="w-3 h-3" /> AI Result
+                                    </span>
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="ghost" onClick={() => setAiCode(null)} className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-900 rounded-full">
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                        <Button size="sm" onClick={handleApplyAi} className="h-6 gap-1.5 text-[10px] bg-green-600 hover:bg-green-500 text-white px-2 rounded-md shadow-sm">
+                                            <Check className="w-3 h-3" /> Apply
+                                        </Button>
+                                    </div>
+                                </div>
+                                <Editor height="200px" theme="light" language={language} value={aiCode} options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }} />
                             </div>
                         </div>
                     )}
@@ -362,11 +413,21 @@ export default function NoteCreator({
     );
   }
 
+  // Fallback for non-modal usage
   return (
-    <div className="grid gap-6 md:grid-cols-2 h-full">
+    <div className="h-full">
         <CustomScrollbarStyles />
-        <Card className="h-full border-border/50 shadow-none bg-card/50"><CardHeader><CardTitle className="flex items-center gap-2"><PenTool className="w-4 h-4 text-primary" />{initialData ? "Edit Memory" : "Studio Editor"}</CardTitle></CardHeader><CardContent>{ModalContent}</CardContent></Card>
-        {OutputPanel}
+        <Card className="h-full border-zinc-200 shadow-none bg-white">
+            <CardHeader className="py-4 px-5 border-b border-zinc-100">
+                <CardTitle className="flex items-center gap-2 text-base">
+                    <PenTool className="w-4 h-4 text-primary" />
+                    {initialData ? "Edit Note" : "New Note"}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 overflow-y-auto custom-scrollbar h-[calc(100%-60px)]">
+                {ModalContent}
+            </CardContent>
+        </Card>
     </div>
   );
 }
