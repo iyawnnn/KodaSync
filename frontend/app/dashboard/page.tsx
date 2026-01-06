@@ -16,29 +16,33 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import NoteLibrary from "@/components/notes/NoteLibrary"; 
-import NoteCreator from "@/components/notes/NoteCreator"; 
+import StudioCreator from "@/components/notes/StudioCreator"; 
 import ChatInterface from "@/components/chat/ChatInterface"; 
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("library");
   const [currentProject, setCurrentProject] = useState<any>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionTitle, setCurrentSessionTitle] = useState<string>("New Chat");
   const [editingNote, setEditingNote] = useState<any>(null);
 
   const renderContent = () => {
     switch (activeTab) {
       case "create":
         return (
-          <NoteCreator
+          <StudioCreator
             initialData={editingNote}
             onSuccess={() => {
-              setEditingNote(null);
-              setActiveTab("library");
+              // Optional: keep editing or clear. Usually for Studio, we keep it open.
+              // If you want to go back to library on save, uncomment next lines:
+              // setEditingNote(null);
+              // setActiveTab("library");
             }}
+            currentProjectId={currentProject?.id}
           />
         );
       case "chat":
-        return <ChatInterface sessionId={currentSessionId} />;
+        return <ChatInterface sessionId={currentSessionId || undefined} />;
       case "library":
       default:
         return (
@@ -58,9 +62,32 @@ export default function DashboardPage() {
     setActiveTab("library");
   };
 
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = (sessionId: string | null, title?: string) => {
     setCurrentSessionId(sessionId);
+    if (title) setCurrentSessionTitle(title);
+    if (sessionId === null) setCurrentSessionTitle("New Chat");
     setActiveTab("chat");
+  };
+
+  // 🚀 NEW: Handler for clicking a Note in the Sidebar
+  const handleSelectNote = (note: any) => {
+    setEditingNote(note); // Load the note data
+    setActiveTab("create"); // Switch to Studio view
+  };
+
+  const getRootTitle = () => {
+    switch (activeTab) {
+        case "chat": return "AI Chat";
+        case "create": return "Studio";
+        default: return "Library";
+    }
+  }
+
+  const getBreadcrumbTitle = () => {
+    if (activeTab === "chat") return currentSessionTitle;
+    if (activeTab === "create") return editingNote ? editingNote.title : "New Document";
+    if (activeTab === "library") return currentProject ? currentProject.name : "All Notes";
+    return "Dashboard";
   };
 
   return (
@@ -72,6 +99,8 @@ export default function DashboardPage() {
         setActiveTab={setActiveTab}
         onSelectProject={handleSelectProject}
         onSelectSession={handleSelectSession}
+        onSelectNote={handleSelectNote} // 🚀 PASSED PROP
+        currentSessionId={currentSessionId}
       />
 
       <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
@@ -85,21 +114,15 @@ export default function DashboardPage() {
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <span className="font-bold text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  KodaSync
+                  {getRootTitle()}
                 </span>
               </BreadcrumbItem>
+              
               <BreadcrumbSeparator className="hidden md:block text-muted-foreground" />
+              
               <BreadcrumbItem>
-                <BreadcrumbPage className="font-semibold text-sm text-foreground">
-                  {activeTab === "chat"
-                    ? "AI Chat"
-                    : activeTab === "create"
-                    ? editingNote
-                      ? "Edit Note"
-                      : "Creator Studio"
-                    : currentProject
-                    ? currentProject.name
-                    : "My Library"}
+                <BreadcrumbPage className="font-semibold text-sm text-foreground capitalize">
+                  {getBreadcrumbTitle()}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -108,9 +131,9 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         <div
-          className={`flex-1 p-6 ${
-            activeTab === "chat"
-              ? "overflow-hidden"
+          className={`flex-1 p-2 md:p-6 ${
+            activeTab === "chat" || activeTab === "create"
+              ? "overflow-hidden" // Studio handles its own scrolling
               : "overflow-y-auto scroll-smooth"
           }`}
         >

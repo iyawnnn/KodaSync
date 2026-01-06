@@ -3,6 +3,7 @@ import uuid
 import hashlib
 from collections import Counter
 from typing import Optional, List
+from datetime import datetime
 
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -24,7 +25,6 @@ from ..services.cache_service import (
 from ..services.ai_service import (
     generate_tags,
     explain_code_snippet,
-    chat_with_notes,
     perform_ai_action,
 )
 from ..services.vector_service import get_vector
@@ -38,6 +38,14 @@ router = APIRouter(prefix="/notes", tags=["Notes"])
 # --- Models ---
 class UrlImportRequest(BaseModel):
     url: str
+    project_id: Optional[str] = None
+    save: bool = True 
+
+# 🚀 NEW: Update Model (Fields are optional for Rename/Partial updates)
+class NoteUpdate(BaseModel):
+    title: Optional[str] = None
+    code_snippet: Optional[str] = None
+    language: Optional[str] = None
     project_id: Optional[str] = None
 
 
@@ -67,11 +75,8 @@ def get_current_user(
 def process_note_ai(
     note_id: uuid.UUID, user_id: uuid.UUID, title: str, code: str, language: str
 ):
-    """
-    Runs in the background to generate AI tags and embeddings.
-    """
     try:
-        print(f"⚙️ Background: Generating AI metadata for note {note_id}...")
+        print(f"⚙️ Background: Generating AI tags for note {note_id}...")
         ai_tags = generate_tags(code, language)
         combined_text = f"{title} \n {code}"
         vector = get_vector(combined_text)
@@ -90,7 +95,7 @@ def process_note_ai(
         print(f"🔥 Background Task Failed: {e}")
 
 
-# --- 🚀 NEW ENDPOINT: Import from URL ---
+# --- 🚀 Import from URL ---
 @router.post("/import-url", response_model=NoteRead)
 @limiter.limit("5/minute")
 async def import_note_from_url(
@@ -99,34 +104,43 @@ async def import_note_from_url(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    # 1. Scrape
     data = scrape_url(body.url)
     if not data:
         raise HTTPException(status_code=400, detail="Could not scrape that URL")
 
-    # 2. Vectorize (Synchronous for immediate searchability)
-    vector = get_vector(data["content"])
+    if body.save:
+        vector = get_vector(data["content"])
+        new_note = Note(
+            title=f"Imported: {data['title']}",
+            content=data["content"],
+            code_snippet=data["content"],
+            language=data["language"],
+            tags="imported,documentation",
+            owner_id=current_user.id,
+            project_id=uuid.UUID(body.project_id) if body.project_id else None,
+            embedding=vector,
+        )
 
-    # 3. Create Note
-    new_note = Note(
-        title=f"Imported: {data['title']}",
-        content=data["content"],
-        # 🚀 FIXED: Removed the limit. Now captures full files.
-        code_snippet=data["content"], 
-        language=data["language"],
-        tags="imported,documentation",
-        owner_id=current_user.id,
-        project_id=uuid.UUID(body.project_id) if body.project_id else None,
-        embedding=vector,
-    )
+        session.add(new_note)
+        session.commit()
+        session.refresh(new_note)
+        clear_user_search_cache(current_user.id)
+        return new_note
 
-    session.add(new_note)
-    session.commit()
-    session.refresh(new_note)
-
-    clear_user_search_cache(current_user.id)
-
-    return new_note
+    else:
+        return NoteRead(
+            id=uuid.uuid4(), 
+            title=data['title'] or "Fetched Snippet",
+            content=data["content"],
+            code_snippet=data["content"],
+            language=data["language"],
+            tags="transient",
+            is_pinned=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            owner_id=current_user.id,
+            project_id=uuid.UUID(body.project_id) if body.project_id else None
+        )
 
 
 # --- Standard Endpoints ---
@@ -144,8 +158,8 @@ async def create_note(
         title=note_data.title,
         code_snippet=note_data.code_snippet,
         language=note_data.language,
-        tags="",  # Placeholder
-        embedding=None,  # Placeholder
+        tags="", 
+        embedding=None, 
         owner_id=current_user.id,
         project_id=note_data.project_id,
     )
@@ -221,10 +235,11 @@ async def get_user_tags(
     return [tag for tag, count in tag_counter.most_common()]
 
 
+# 🚀 FIXED: Now accepts NoteUpdate (partial fields) instead of NoteCreate (all required)
 @router.put("/{note_id}", response_model=NoteRead)
 async def update_note(
     note_id: str,
-    note_data: NoteCreate,
+    note_data: NoteUpdate, # Changed type
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -237,14 +252,24 @@ async def update_note(
     if not note or note.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Not found")
 
-    new_tags = generate_tags(note_data.code_snippet, note_data.language)
-    new_vector = get_vector(f"{note_data.title} \n {note_data.code_snippet}")
+    # 1. Update simple fields if provided
+    if note_data.title is not None:
+        note.title = note_data.title
+    if note_data.language is not None:
+        note.language = note_data.language
+    if note_data.project_id is not None:
+        note.project_id = uuid.UUID(note_data.project_id) if note_data.project_id != "global" else None
 
-    note.title = note_data.title
-    note.code_snippet = note_data.code_snippet
-    note.language = note_data.language
-    note.tags = new_tags
-    note.embedding = new_vector
+    # 2. Logic for costly updates (Code & AI)
+    # Only re-run AI generation if code changed
+    if note_data.code_snippet is not None:
+        note.code_snippet = note_data.code_snippet
+        # Regenerate tags since code changed
+        note.tags = generate_tags(note.code_snippet, note.language)
+    
+    # 3. Always update vector if Title OR Code changed (for accurate search)
+    if note_data.title is not None or note_data.code_snippet is not None:
+        note.embedding = get_vector(f"{note.title} \n {note.code_snippet}")
 
     session.add(note)
     session.commit()
