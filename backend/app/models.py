@@ -9,9 +9,14 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(unique=True, index=True)
-    password_hash: str
+    password_hash: Optional[str] = None
     refresh_token: Optional[str] = None 
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    
+    provider: str = Field(default="local")
     
     notes: List["Note"] = Relationship(back_populates="owner")
     projects: List["Project"] = Relationship(back_populates="owner")

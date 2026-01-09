@@ -20,7 +20,8 @@ import StudioCreator from "@/components/notes/StudioCreator";
 import ChatInterface from "@/components/chat/ChatInterface"; 
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState("library");
+  // 🚀 CHANGED: Default is now "chat"
+  const [activeTab, setActiveTab] = useState("chat");
   const [currentProject, setCurrentProject] = useState<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>("New Chat");
@@ -30,7 +31,6 @@ export default function DashboardPage() {
     switch (activeTab) {
       case "create":
         return (
-          // 🚀 Added padding wrapper here
           <div className="h-full p-2 md:p-6">
             <StudioCreator
               initialData={editingNote}
@@ -41,7 +41,6 @@ export default function DashboardPage() {
         );
       case "chat":
         return (
-          // 🚀 Added padding wrapper here
           <div className="h-full p-2 md:p-6">
             <ChatInterface sessionId={currentSessionId || undefined} />
           </div>
@@ -49,7 +48,6 @@ export default function DashboardPage() {
       case "library":
       default:
         return (
-          // 🚀 No padding wrapper for Library (It handles its own full-width layout)
           <NoteLibrary
             projectId={currentProject?.id}
             onEdit={(note) => {
@@ -135,7 +133,6 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         <div
-          // 🚀 REMOVED PADDING from here (moved to children)
           className={`flex-1 main-scrollbar ${
             activeTab === "chat" || activeTab === "create"
               ? "overflow-hidden"

@@ -1,12 +1,14 @@
 from pydantic import BaseModel, EmailStr
 import uuid
+from typing import Optional
 
-# What the user sends during Sign Up
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-
-# What we send back (NEVER send the password back)
+    full_name: str
+    
 class UserRead(BaseModel):
     id: uuid.UUID
     email: EmailStr
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None

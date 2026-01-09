@@ -1,5 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer # <--- 1. ADDED OAuth2PasswordBearer
+from fastapi.responses import RedirectResponse
 from sqlmodel import Session, select
+from pydantic import BaseModel
+import httpx 
+
 from ..database import get_session
 from ..models import User
 from ..schemas.user import UserCreate, UserRead
@@ -7,10 +12,12 @@ from ..services.auth_service import (
     get_password_hash, verify_password, 
     create_access_token, create_refresh_token, decode_token
 )
-from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from ..config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# 2. DEFINE TOKEN SOURCE
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -20,6 +27,33 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+# 3. NEW DEPENDENCY: GET CURRENT USER
+async def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+    """
+    Decodes the token and retrieves the user from the database.
+    """
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    user_id = payload.get("sub")
+    user = session.get(User, user_id)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user
+
+# 4. NEW ENDPOINT: /ME
+@router.get("/me", response_model=UserRead)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    """
+    Get the current logged-in user's profile.
+    """
+    return current_user
+
+# --- EXISTING ROUTES BELOW ---
+
 @router.post("/signup", response_model=UserRead)
 async def signup(user_data: UserCreate, session: Session = Depends(get_session)):
     existing_user = session.exec(select(User).where(User.email == user_data.email)).first()
@@ -28,7 +62,9 @@ async def signup(user_data: UserCreate, session: Session = Depends(get_session))
     
     new_user = User(
         email=user_data.email, 
-        password_hash=get_password_hash(user_data.password)
+        password_hash=get_password_hash(user_data.password),
+        full_name=user_data.full_name,
+        provider="local"
     )
     session.add(new_user)
     session.commit()
@@ -38,14 +74,20 @@ async def signup(user_data: UserCreate, session: Session = Depends(get_session))
 @router.post("/login", response_model=TokenResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.email == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.password_hash):
+    
+    if not user:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
-    # Generate Both Tokens
+    # Check if they are a GitHub user trying to use a password
+    if not user.password_hash:
+        raise HTTPException(status_code=400, detail="Please log in with GitHub")
+
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
-    # Save Refresh Token
     user.refresh_token = refresh_token
     session.add(user)
     session.commit()
@@ -58,19 +100,15 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Sessi
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(body: RefreshRequest, session: Session = Depends(get_session)):
-    # 1. Validate Token
     payload = decode_token(body.refresh_token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user_id = payload.get("sub")
-    
-    # 2. Check DB
     user = session.get(User, user_id)
     if not user or user.refresh_token != body.refresh_token:
         raise HTTPException(status_code=401, detail="Token revoked")
 
-    # 3. Rotate Tokens
     new_access = create_access_token(data={"sub": str(user.id)})
     new_refresh = create_refresh_token(data={"sub": str(user.id)})
 
@@ -83,3 +121,71 @@ async def refresh_token(body: RefreshRequest, session: Session = Depends(get_ses
         "refresh_token": new_refresh,
         "token_type": "bearer"
     }
+
+@router.get("/github/login")
+async def github_login():
+    return RedirectResponse(
+        f"https://github.com/login/oauth/authorize?client_id={settings.GITHUB_CLIENT_ID}&scope=user:email"
+    )
+
+@router.get("/github/callback")
+async def github_callback(code: str, session: Session = Depends(get_session)):
+    async with httpx.AsyncClient() as client:
+        token_res = await client.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            params={
+                "client_id": settings.GITHUB_CLIENT_ID,
+                "client_secret": settings.GITHUB_CLIENT_SECRET,
+                "code": code
+            }
+        )
+        token_data = token_res.json()
+        if "error" in token_data:
+            raise HTTPException(status_code=400, detail=f"GitHub Login Failed: {token_data.get('error_description')}")
+        
+        access_token = token_data["access_token"]
+        
+        # Get User & Email
+        user_res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}"})
+        user_github_data = user_res.json()
+        
+        email_res = await client.get("https://api.github.com/user/emails", headers={"Authorization": f"Bearer {access_token}"})
+        emails = email_res.json()
+        
+        primary_email = next((e["email"] for e in emails if e["primary"] and e["verified"]), None)
+        if not primary_email:
+             raise HTTPException(status_code=400, detail="No verified email found.")
+
+    user = session.exec(select(User).where(User.email == primary_email)).first()
+    
+    # Create or Update User
+    if not user:
+        user = User(
+            email=primary_email,
+            full_name=user_github_data.get("name") or user_github_data.get("login"),
+            avatar_url=user_github_data.get("avatar_url"),
+            password_hash=None,
+            provider="github"
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    else:
+        if user.provider == "local":
+             user.provider = "github_linked" 
+        user.avatar_url = user_github_data.get("avatar_url")
+        user.full_name = user_github_data.get("name") or user_github_data.get("login")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    access_token_jwt = create_access_token(data={"sub": str(user.id)})
+    refresh_token_jwt = create_refresh_token(data={"sub": str(user.id)})
+    
+    user.refresh_token = refresh_token_jwt
+    session.add(user)
+    session.commit()
+
+    frontend_url = f"http://localhost:3000/auth/callback?access_token={access_token_jwt}&refresh_token={refresh_token_jwt}"
+    return RedirectResponse(url=frontend_url)
