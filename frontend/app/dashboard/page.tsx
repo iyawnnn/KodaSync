@@ -30,22 +30,26 @@ export default function DashboardPage() {
     switch (activeTab) {
       case "create":
         return (
-          <StudioCreator
-            initialData={editingNote}
-            onSuccess={() => {
-              // Optional: keep editing or clear. Usually for Studio, we keep it open.
-              // If you want to go back to library on save, uncomment next lines:
-              // setEditingNote(null);
-              // setActiveTab("library");
-            }}
-            currentProjectId={currentProject?.id}
-          />
+          // 🚀 Added padding wrapper here
+          <div className="h-full p-2 md:p-6">
+            <StudioCreator
+              initialData={editingNote}
+              onSuccess={() => {}}
+              currentProjectId={currentProject?.id}
+            />
+          </div>
         );
       case "chat":
-        return <ChatInterface sessionId={currentSessionId || undefined} />;
+        return (
+          // 🚀 Added padding wrapper here
+          <div className="h-full p-2 md:p-6">
+            <ChatInterface sessionId={currentSessionId || undefined} />
+          </div>
+        );
       case "library":
       default:
         return (
+          // 🚀 No padding wrapper for Library (It handles its own full-width layout)
           <NoteLibrary
             projectId={currentProject?.id}
             onEdit={(note) => {
@@ -69,10 +73,9 @@ export default function DashboardPage() {
     setActiveTab("chat");
   };
 
-  // 🚀 NEW: Handler for clicking a Note in the Sidebar
   const handleSelectNote = (note: any) => {
-    setEditingNote(note); // Load the note data
-    setActiveTab("create"); // Switch to Studio view
+    setEditingNote(note);
+    setActiveTab("create");
   };
 
   const getRootTitle = () => {
@@ -99,8 +102,9 @@ export default function DashboardPage() {
         setActiveTab={setActiveTab}
         onSelectProject={handleSelectProject}
         onSelectSession={handleSelectSession}
-        onSelectNote={handleSelectNote} // 🚀 PASSED PROP
+        onSelectNote={handleSelectNote}
         currentSessionId={currentSessionId}
+        currentProjectId={currentProject?.id || null}
       />
 
       <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
@@ -131,9 +135,10 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         <div
-          className={`flex-1 p-2 md:p-6 ${
+          // 🚀 REMOVED PADDING from here (moved to children)
+          className={`flex-1 main-scrollbar ${
             activeTab === "chat" || activeTab === "create"
-              ? "overflow-hidden" // Studio handles its own scrolling
+              ? "overflow-hidden"
               : "overflow-y-auto scroll-smooth"
           }`}
         >

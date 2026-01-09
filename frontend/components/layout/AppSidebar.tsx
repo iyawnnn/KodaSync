@@ -20,7 +20,8 @@ import {
   FileCode,
   Copy,
   Loader2,
-  AlertTriangle // 🚀 Warning Icon
+  AlertTriangle,
+  Layers
 } from "lucide-react";
 import { NavUser } from "@/components/layout/NavUser";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
@@ -43,7 +44,6 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-  DialogClose
 } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -76,6 +76,7 @@ export function AppSidebar({
   onSelectSession,
   onSelectNote,
   currentSessionId,
+  currentProjectId,
 }: {
   activeTab: string;
   setActiveTab: (val: string) => void;
@@ -83,6 +84,7 @@ export function AppSidebar({
   onSelectSession: (sessionId: string | null, title?: string) => void;
   onSelectNote?: (note: any) => void;
   currentSessionId?: string | null;
+  currentProjectId?: string | null;
 }) {
   const { state } = useSidebar();
   const [projects, setProjects] = React.useState<any[]>([]);
@@ -92,12 +94,10 @@ export function AppSidebar({
   const [newItemName, setNewItemName] = React.useState("");
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
-  // 🚀 RENAME STATE
+  // States for Modals
   const [renameItem, setRenameItem] = React.useState<{ id: string, type: 'session' | 'project' | 'note', currentName: string } | null>(null);
   const [renameValue, setRenameValue] = React.useState("");
   const [renameLoading, setRenameLoading] = React.useState(false);
-
-  // 🚀 DELETE MODAL STATE
   const [deleteItem, setDeleteItem] = React.useState<{ id: string, type: 'session' | 'project' | 'note', name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
@@ -141,7 +141,6 @@ export function AppSidebar({
     } catch (e) { toast.error("Error starting chat"); }
   };
 
-  // 🚀 OPEN DELETE MODAL (Instead of window.confirm)
   const confirmDelete = (e: React.MouseEvent, item: any, type: 'session' | 'project' | 'note') => {
       e.stopPropagation();
       setDeleteItem({ 
@@ -151,7 +150,6 @@ export function AppSidebar({
       });
   };
 
-  // 🚀 EXECUTE DELETE
   const executeDelete = async () => {
     if (!deleteItem) return;
     setDeleteLoading(true);
@@ -165,14 +163,15 @@ export function AppSidebar({
         } else if (type === 'project') {
             await api.delete(`/projects/${id}`);
             setProjects(projects.filter((p) => p.id !== id));
+            if (currentProjectId === id) onSelectProject(null);
         } else if (type === 'note') {
             await api.delete(`/notes/${id}`);
             setNotes(notes.filter((n) => n.id !== id));
         }
-        toast.success("Item deleted permanently");
-        setDeleteItem(null); // Close modal
+        toast.success("Deleted successfully");
+        setDeleteItem(null);
     } catch (e) { 
-        toast.error("Failed to delete item"); 
+        toast.error("Failed to delete"); 
     } finally {
         setDeleteLoading(false);
     }
@@ -236,6 +235,7 @@ export function AppSidebar({
   const filteredNotes = notes.filter((n) => (n.title || "").toLowerCase().includes(searchQuery.toLowerCase()));
 
   const renderList = () => {
+    // 1. CHAT LIST
     if (activeTab === 'chat') {
         if (filteredSessions.length === 0) return <EmptyState icon={Sparkles} label="Start a new chat" />;
         return filteredSessions.map(s => (
@@ -259,14 +259,16 @@ export function AppSidebar({
         ));
     }
     
+    // 2. STUDIO NOTES LIST
     if (activeTab === 'create') {
         if (filteredNotes.length === 0) return <EmptyState icon={FileCode} label="No notes created yet" />;
         return filteredNotes.map(n => (
             <SidebarItem 
                 key={n.id} 
-                icon={FileCode} 
+                icon={n.is_pinned ? Pin : FileCode} // 🚀 FIXED ICON LOGIC
                 label={n.title || "Untitled Note"} 
                 subLabel={formatLabel(n.language)}
+                isPinned={n.is_pinned} // 🚀 PASS PINNED PROP
                 onClick={() => onSelectNote && onSelectNote(n)}
                 actions={
                     <>
@@ -280,25 +282,43 @@ export function AppSidebar({
         ));
     }
 
-    if (filteredProjects.length === 0) return <EmptyState icon={Folder} label="No projects found" />;
-    return filteredProjects.map(p => (
-        <SidebarItem 
-            key={p.id} 
-            icon={p.is_pinned ? Pin : Folder} 
-            label={p.name} 
-            isActive={false}
-            isPinned={p.is_pinned}
-            onClick={() => onSelectProject(p)}
-            actions={
-                <>
-                    <DropdownMenuItem onClick={(e) => openRenameDialog(e, p, 'project')}><Edit2 className="mr-2 size-3.5"/>Rename</DropdownMenuItem>
-                    <DropdownMenuItem onClick={(e) => handlePin(e, p, 'project')}>{p.is_pinned ? <PinOff className="mr-2 size-3.5"/> : <Pin className="mr-2 size-3.5"/>}{p.is_pinned ? "Unpin" : "Pin"}</DropdownMenuItem>
-                    <DropdownMenuSeparator className="my-1"/>
-                    <DropdownMenuItem onClick={(e) => confirmDelete(e, p, 'project')} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 size-3.5"/>Delete</DropdownMenuItem>
-                </>
-            }
-        />
-    ));
+    // 3. PROJECT LIST
+    return (
+        <div className="flex flex-col gap-1">
+            <SidebarItem 
+                icon={Layers} 
+                label="All Notes" 
+                subLabel="Global"
+                isActive={currentProjectId === null} 
+                onClick={() => onSelectProject(null)}
+            />
+            
+            {filteredProjects.length > 0 ? (
+                filteredProjects.map(p => (
+                    <SidebarItem 
+                        key={p.id} 
+                        icon={p.is_pinned ? Pin : Folder} 
+                        label={p.name} 
+                        isActive={p.id === currentProjectId}
+                        isPinned={p.is_pinned}
+                        onClick={() => onSelectProject(p)}
+                        actions={
+                            <>
+                                <DropdownMenuItem onClick={(e) => openRenameDialog(e, p, 'project')}><Edit2 className="mr-2 size-3.5"/>Rename</DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handlePin(e, p, 'project')}>{p.is_pinned ? <PinOff className="mr-2 size-3.5"/> : <Pin className="mr-2 size-3.5"/>}{p.is_pinned ? "Unpin" : "Pin"}</DropdownMenuItem>
+                                <DropdownMenuSeparator className="my-1"/>
+                                <DropdownMenuItem onClick={(e) => confirmDelete(e, p, 'project')} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 size-3.5"/>Delete</DropdownMenuItem>
+                            </>
+                        }
+                    />
+                ))
+            ) : (
+                <div className="pt-4">
+                    <EmptyState icon={Folder} label="No projects found" />
+                </div>
+            )}
+        </div>
+    );
   };
 
   return (
@@ -365,7 +385,7 @@ export function AppSidebar({
       </div>
     </Sidebar>
 
-    {/* 🚀 RENAME DIALOG */}
+    {/* Rename Dialog */}
     <Dialog open={!!renameItem} onOpenChange={(open) => !open && setRenameItem(null)}>
         <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -389,7 +409,7 @@ export function AppSidebar({
         </DialogContent>
     </Dialog>
 
-    {/* 🚀 BEAUTIFUL DELETE MODAL */}
+    {/* Delete Modal */}
     <Dialog open={!!deleteItem} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <DialogContent className="sm:max-w-[425px] p-0 gap-0 overflow-hidden border-destructive/20 shadow-2xl">
             <div className="bg-destructive/10 p-6 flex flex-col items-center justify-center border-b border-destructive/10">
@@ -401,12 +421,10 @@ export function AppSidebar({
                     You are about to permanently delete <br/><span className="font-bold text-foreground">"{deleteItem?.name}"</span>
                 </DialogDescription>
             </div>
-            
             <div className="p-6 bg-background">
                 <div className="text-sm text-muted-foreground text-center mb-6 leading-relaxed">
                     This action <span className="font-bold text-foreground">cannot be undone</span>. All data associated with this {deleteItem?.type} will be removed from our servers forever.
                 </div>
-                
                 <div className="flex gap-3 justify-end">
                     <Button variant="outline" onClick={() => setDeleteItem(null)} className="flex-1">
                         Cancel
@@ -437,12 +455,15 @@ const SidebarItem = ({ icon: Icon, label, subLabel, isActive, isPinned, onClick,
         <span className={cn("text-sm font-medium truncate text-sidebar-foreground/90 group-hover:text-sidebar-foreground transition-colors capitalize", isPinned && "font-semibold text-sidebar-foreground")}>{label}</span>
         {subLabel && <span className="text-xs text-muted-foreground/60 truncate capitalize">{subLabel}</span>}
     </div>
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20">
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button onClick={(e) => e.stopPropagation()} variant="ghost" className="h-7 w-5 p-0 rounded-md opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity hover:bg-sidebar-background hover:text-sidebar-foreground"><MoreVertical className="size-4 text-muted-foreground" strokeWidth={2} /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 font-medium p-1.5 shadow-xl border-sidebar-border bg-popover text-popover-foreground">{actions}</DropdownMenuContent>
-        </DropdownMenu>
-    </div>
+    
+    {actions && (
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button onClick={(e) => e.stopPropagation()} variant="ghost" className="h-7 w-5 p-0 rounded-md opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity hover:bg-sidebar-background hover:text-sidebar-foreground"><MoreVertical className="size-4 text-muted-foreground" strokeWidth={2} /></Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 font-medium p-1.5 shadow-xl border-sidebar-border bg-popover text-popover-foreground">{actions}</DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    )}
   </div>
 );
 

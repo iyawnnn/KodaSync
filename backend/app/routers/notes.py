@@ -41,7 +41,6 @@ class UrlImportRequest(BaseModel):
     project_id: Optional[str] = None
     save: bool = True 
 
-# 🚀 NEW: Update Model (Fields are optional for Rename/Partial updates)
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     code_snippet: Optional[str] = None
@@ -220,6 +219,7 @@ async def search_notes(
     return clean_results
 
 
+# 🚀 FIXED: Normalizes tags to Title Case to prevent duplicates (e.g. "python" == "Python")
 @router.get("/tags/")
 async def get_user_tags(
     current_user: User = Depends(get_current_user),
@@ -230,16 +230,16 @@ async def get_user_tags(
     tag_counter = Counter()
     for tag_str in results:
         if tag_str:
-            tags = [t.strip() for t in tag_str.split(",")]
+            # 🎨 Split, Strip, and Title Case every tag
+            tags = [t.strip().title() for t in tag_str.split(",")]
             tag_counter.update(tags)
     return [tag for tag, count in tag_counter.most_common()]
 
 
-# 🚀 FIXED: Now accepts NoteUpdate (partial fields) instead of NoteCreate (all required)
 @router.put("/{note_id}", response_model=NoteRead)
 async def update_note(
     note_id: str,
-    note_data: NoteUpdate, # Changed type
+    note_data: NoteUpdate, 
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -252,7 +252,6 @@ async def update_note(
     if not note or note.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Not found")
 
-    # 1. Update simple fields if provided
     if note_data.title is not None:
         note.title = note_data.title
     if note_data.language is not None:
@@ -260,14 +259,10 @@ async def update_note(
     if note_data.project_id is not None:
         note.project_id = uuid.UUID(note_data.project_id) if note_data.project_id != "global" else None
 
-    # 2. Logic for costly updates (Code & AI)
-    # Only re-run AI generation if code changed
     if note_data.code_snippet is not None:
         note.code_snippet = note_data.code_snippet
-        # Regenerate tags since code changed
         note.tags = generate_tags(note.code_snippet, note.language)
     
-    # 3. Always update vector if Title OR Code changed (for accurate search)
     if note_data.title is not None or note_data.code_snippet is not None:
         note.embedding = get_vector(f"{note.title} \n {note.code_snippet}")
 

@@ -4,28 +4,45 @@ import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import {
   Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Trash2,
-  Edit,
+  Edit2,
   X,
   Pin,
   Copy,
-  MoreHorizontal,
   Check,
+  Search,
+  SlidersHorizontal,
+  Loader2,
+  AlertTriangle,
+  Code,
+  Hash,
+  FileCode,
+  Calendar,
+  Clock
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface Note {
   id: string;
@@ -38,6 +55,75 @@ interface Note {
   project_id?: string;
 }
 
+const getLanguageStyle = (lang: string) => {
+  const l = lang?.toLowerCase() || "";
+  if (["typescript", "ts", "react", "tsx"].includes(l)) return "text-blue-600 bg-blue-50 border-blue-200 group-hover:border-blue-300";
+  if (["javascript", "js", "node", "jsx"].includes(l)) return "text-yellow-600 bg-yellow-50 border-yellow-200 group-hover:border-yellow-300";
+  if (["python", "py", "flask", "django"].includes(l)) return "text-green-600 bg-green-50 border-green-200 group-hover:border-green-300";
+  if (["html", "css", "scss", "tailwind"].includes(l)) return "text-orange-600 bg-orange-50 border-orange-200 group-hover:border-orange-300";
+  if (["sql", "database", "mysql", "postgresql", "prisma"].includes(l)) return "text-purple-600 bg-purple-50 border-purple-200 group-hover:border-purple-300";
+  return "text-zinc-600 bg-zinc-100 border-zinc-200 group-hover:border-zinc-300";
+};
+
+// 🚀 FIXED: Dynamic Label Formatting
+// We rely on the AI to provide correct casing for Tags (e.g. "MySQL", "API").
+// We only map Languages because the Editor usually supplies them in strict lowercase.
+const formatLabel = (text: string) => {
+  if (!text) return "";
+  
+  // Check strict lowercase map for known Languages
+  const lower = text.toLowerCase().trim();
+  const langMap: Record<string, string> = {
+    html: "HTML",
+    css: "CSS",
+    sql: "SQL",
+    json: "JSON",
+    xml: "XML",
+    php: "PHP",
+    javascript: "JavaScript",
+    js: "JavaScript",
+    typescript: "TypeScript",
+    ts: "TypeScript",
+    cpp: "C++",
+    csharp: "C#",
+    go: "Go",
+    bash: "Bash",
+    sh: "Bash",
+    yaml: "YAML",
+    yml: "YAML",
+    mysql: "MySQL",
+    postgresql: "PostgreSQL",
+    pgsql: "PostgreSQL",
+  };
+
+  if (langMap[lower]) {
+    return langMap[lower];
+  }
+
+  // Fallback: Return original text (Preserve AI's casing for tags like 'iOS', 'Next.js')
+  // If it's purely lowercase (e.g. user typed it), title case it for neatness.
+  if (text === lower) {
+      return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  
+  return text;
+};
+
+const timeAgo = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
 export default function NoteLibrary({
   onEdit,
   projectId,
@@ -46,23 +132,58 @@ export default function NoteLibrary({
   projectId?: string | null;
 }) {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteNote, setDeleteNote] = useState<Note | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [projectId]);
+
+  useEffect(() => {
+    let result = [...notes];
+
+    if (projectId) {
+      result = result.filter(n => n.project_id === projectId);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        n => 
+          n.title.toLowerCase().includes(q) || 
+          n.code_snippet.toLowerCase().includes(q) ||
+          n.tags?.toLowerCase().includes(q)
+      );
+    }
+
+    // Case-insensitive tag matching
+    if (selectedTags.length > 0) {
+      result = result.filter(n => {
+        const noteTags = n.tags?.split(",").map(t => t.trim().toLowerCase()) || [];
+        return selectedTags.every(tag => noteTags.includes(tag.toLowerCase()));
+      });
+    }
+
+    setFilteredNotes(result);
+  }, [notes, searchQuery, selectedTags, projectId]);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
       const [notesRes, tagsRes] = await Promise.all([
         api.get("/notes/"),
         api.get("/notes/tags/"),
       ]);
       setNotes(notesRes.data);
-      setTags(tagsRes.data);
+      setAvailableTags(tagsRes.data);
     } catch (e) {
       toast.error("Failed to load library");
     } finally {
@@ -72,27 +193,40 @@ export default function NoteLibrary({
 
   const handlePin = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    
+    const updatedNotes = notes.map((n) => 
+      n.id === id ? { ...n, is_pinned: !n.is_pinned } : n
+    );
+    
+    updatedNotes.sort((a, b) => {
+      if (a.is_pinned === b.is_pinned) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return a.is_pinned ? -1 : 1;
+    });
+
+    setNotes(updatedNotes);
+
     try {
       await api.patch(`/notes/${id}/pin`);
-      setNotes(
-        notes.map((n) => (n.id === id ? { ...n, is_pinned: !n.is_pinned } : n))
-      );
-      fetchData();
     } catch (e) {
       toast.error("Failed to pin note");
+      fetchData();
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!confirm("Delete this memory?")) return;
-
+  const executeDelete = async () => {
+    if (!deleteNote) return;
+    setDeleteLoading(true);
     try {
-      await api.delete(`/notes/${id}`);
-      setNotes(notes.filter((n) => n.id !== id));
-      toast.success("Memory deleted");
+      await api.delete(`/notes/${deleteNote.id}`);
+      setNotes(prev => prev.filter((n) => n.id !== deleteNote.id));
+      toast.success("Note deleted");
+      setDeleteNote(null);
     } catch (e) {
       toast.error("Failed to delete");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -100,207 +234,258 @@ export default function NoteLibrary({
     e.stopPropagation();
     navigator.clipboard.writeText(text);
     setCopiedId(id);
-    toast.success("Code copied to clipboard");
+    toast.success("Copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filteredNotes = notes.filter((n) => {
-    if (projectId && n.project_id !== projectId) return false;
-    if (selectedTag && !n.tags?.includes(selectedTag)) return false;
-    return true;
-  });
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
 
-  const visibleTags = tags.slice(0, 4);
-  const hiddenTags = tags.slice(4);
-
-  if (loading)
+  if (loading) {
     return (
-      <div className="text-muted-foreground text-center py-10 font-kodaSync text-lg">
-        Loading Library...
+      <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground animate-in fade-in">
+        <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary/50" />
+        <p className="text-sm font-medium">Loading your library...</p>
       </div>
     );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* FILTER BAR */}
-      <div className="flex items-center gap-2">
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-2">
-          {projectId ? "Project Filters" : "Global Filters"}
-        </div>
-
-        {selectedTag && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedTag(null)}
-            className="h-6 px-2 text-destructive bg-destructive/10 hover:bg-destructive/20 text-xs rounded-full"
-            data-testid="clear-tags-btn"
-          >
-            <X className="w-3 h-3 mr-1" /> Clear
-          </Button>
-        )}
-
-        {visibleTags.map((tag) => (
-          <button
-            key={tag}
-            onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-            data-testid={`tag-filter-${tag}`}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
-              selectedTag === tag
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-muted-foreground border-border hover:border-foreground hover:text-foreground"
-            }`}
-          >
-            {tag}
-          </button>
-        ))}
-
-        {hiddenTags.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="px-2 py-1 rounded-full text-xs font-medium bg-card text-muted-foreground border border-border hover:border-foreground hover:text-foreground flex items-center">
-                More <MoreHorizontal className="w-3 h-3 ml-1" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-popover border-border text-popover-foreground">
-              {hiddenTags.map((tag) => (
-                <DropdownMenuItem
-                  key={tag}
-                  onClick={() => setSelectedTag(tag)}
-                  className="cursor-pointer"
-                  data-testid={`tag-filter-more-${tag}`}
-                >
-                  {tag}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      {/* NOTES GRID */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredNotes.map((note) => (
-          <Card
-            key={note.id}
-            data-testid={`note-card-${note.id}`}
-            className={`bg-card border flex flex-col transition-all group relative overflow-hidden ${
-              note.is_pinned
-                ? "border-yellow-500/50 shadow-sm"
-                : "border-border hover:border-foreground/50"
-            }`}
-          >
-            {note.is_pinned && (
-              <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-bl from-yellow-500/10 to-transparent pointer-events-none" />
-            )}
-
-            <CardHeader className="pb-2 relative z-10">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-xl font-kodaSync font-bold truncate pr-6 text-card-foreground">
-                  {note.title}
-                </CardTitle>
-                <div className="flex gap-1">
-                  <button
-                    onClick={(e) => handlePin(e, note.id)}
-                    data-testid={`pin-note-${note.id}`}
-                    className={`p-1.5 rounded-md transition-colors ${
-                      note.is_pinned
-                        ? "text-yellow-500 bg-yellow-500/10"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    }`}
-                  >
-                    <Pin
-                      className={`w-3.5 h-3.5 ${
-                        note.is_pinned ? "fill-yellow-500" : ""
-                      }`}
-                    />
-                  </button>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-screen pb-20">
+      
+      {/* --- FILTER HEADER --- */}
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 px-4 md:px-8 border-b border-border/40 transition-all">
+        <div className="flex flex-col gap-3 max-w-4xl mx-auto">
+            <div className="relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                <Input 
+                    placeholder="Search notes, code, or tags..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-11 bg-white/50 border-zinc-200 hover:border-zinc-300 focus-visible:ring-primary/20 shadow-sm rounded-xl transition-all"
+                />
+                
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className={cn(
+                                    "h-7 gap-2 text-xs font-medium border-zinc-200 hover:bg-zinc-50",
+                                    selectedTags.length > 0 && "text-primary border-primary/20 bg-primary/5"
+                                )}
+                            >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                Filters
+                                {selectedTags.length > 0 && (
+                                    <Badge variant="secondary" className="h-4 px-1 rounded-[4px] bg-primary text-primary-foreground text-[9px] min-w-[1.25rem] justify-center">
+                                        {selectedTags.length}
+                                    </Badge>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 p-2">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground font-normal uppercase tracking-wider">
+                                Filter by Tags
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
+                                {availableTags.length === 0 ? (
+                                    <div className="text-xs text-muted-foreground p-2 text-center">No tags available</div>
+                                ) : (
+                                    availableTags.map((tag) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={tag}
+                                            checked={selectedTags.includes(tag)}
+                                            onCheckedChange={() => toggleTag(tag)}
+                                            className="text-xs font-medium cursor-pointer"
+                                        >
+                                            {formatLabel(tag)} 
+                                        </DropdownMenuCheckboxItem>
+                                    ))
+                                )}
+                            </div>
+                            {selectedTags.length > 0 && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="w-full h-7 text-xs text-destructive hover:text-destructive"
+                                        onClick={() => setSelectedTags([])}
+                                    >
+                                        Clear Filters
+                                    </Button>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-              </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="flex-1 relative group/code">
-              <div className="bg-zinc-950 p-3 rounded-md font-mono text-xs text-muted-foreground h-24 overflow-hidden relative border border-border">
-                {note.code_snippet}
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 to-transparent pointer-events-none" />
-                <div className="absolute top-2 right-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="h-6 w-6 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-300"
-                    onClick={(e) => handleCopy(e, note.code_snippet, note.id)}
-                    data-testid={`copy-note-${note.id}`}
-                  >
-                    {copiedId === note.id ? (
-                      <Check className="w-3 h-3 text-green-400" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                <span className="px-1.5 py-0.5 bg-accent text-accent-foreground text-[10px] rounded border border-border uppercase font-bold tracking-wider">
-                  {note.language}
-                </span>
-                {note.tags
-                  ?.split(",")
-                  .slice(0, 2)
-                  .map((tag, i) => (
-                    <span
-                      key={i}
-                      className="px-1.5 py-0.5 text-muted-foreground text-[10px]"
+            {selectedTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1">
+                    {selectedTags.map(tag => (
+                        <Badge 
+                            key={tag} 
+                            variant="secondary" 
+                            className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200 pl-2 pr-1 py-1 h-6 gap-1 cursor-pointer transition-colors"
+                            onClick={() => toggleTag(tag)}
+                        >
+                            <Hash className="w-3 h-3 text-zinc-400" />
+                            {formatLabel(tag)}
+                            <X className="w-3 h-3 ml-1 text-zinc-400 hover:text-destructive transition-colors" />
+                        </Badge>
+                    ))}
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setSelectedTags([])}
+                        className="h-6 text-xs text-muted-foreground hover:text-foreground px-2"
                     >
-                      #{tag.trim()}
-                    </span>
-                  ))}
-              </div>
-            </CardContent>
-
-            <CardFooter className="pt-0 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity border-t border-border mt-2 py-2 px-4 bg-muted/30">
-              <span className="text-[10px] text-muted-foreground">
-                {new Date(note.created_at).toLocaleDateString()}
-              </span>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onEdit(note)}
-                  data-testid={`edit-note-${note.id}`}
-                  className="h-7 w-7 hover:text-primary"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => handleDelete(e, note.id)}
-                  data-testid={`delete-note-${note.id}`}
-                  className="h-7 w-7 hover:text-destructive"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
+                        Clear all
+                    </Button>
+                </div>
+            )}
+        </div>
       </div>
 
-      {filteredNotes.length === 0 && (
-        <div
-          className="text-center py-20 border border-dashed border-border rounded-lg"
-          data-testid="empty-state"
-        >
-          <h3 className="text-lg text-foreground font-kodaSync">
-            Empty Collection
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {projectId
-              ? "No notes found in this project yet."
-              : "No notes found."}
-          </p>
+      {/* --- COMPACT GRID --- */}
+      {filteredNotes.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-7xl mx-auto px-4 md:px-8">
+            {filteredNotes.map((note) => {
+                const langStyle = getLanguageStyle(note.language);
+                
+                return (
+                <Card
+                    key={note.id}
+                    onClick={() => onEdit(note)}
+                    className={cn(
+                        "group relative flex flex-col justify-between overflow-hidden transition-all duration-300 bg-white border cursor-pointer hover:shadow-lg hover:-translate-y-1 rounded-xl",
+                        note.is_pinned 
+                            ? "border-primary/40 bg-primary/[0.01]" 
+                            : "border-zinc-200 hover:border-primary/30"
+                    )}
+                >
+                    {/* Header */}
+                    <div className="px-3 pt-3 pb-2 flex items-start justify-between gap-2">
+                        <div className="flex flex-col min-w-0 gap-1.5">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-sm text-zinc-800 truncate group-hover:text-primary transition-colors">
+                                    {note.title}
+                                </h3>
+                                {note.is_pinned && <Pin className="w-3.5 h-3.5 text-primary fill-primary/20 shrink-0" />}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Badge 
+                                    variant="outline" 
+                                    className={cn("h-4 px-1.5 text-[9px] font-bold tracking-wider", langStyle)}
+                                >
+                                    {formatLabel(note.language)}
+                                </Badge>
+                                <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {timeAgo(note.created_at)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Preview */}
+                    <div className="px-3 pb-3 flex-1 min-h-0">
+                        <div className="relative bg-zinc-50 border border-zinc-100 rounded-lg p-2.5 h-24 overflow-hidden font-mono text-[10px] leading-relaxed text-zinc-600 select-none group-hover:bg-white group-hover:border-zinc-200 transition-colors">
+                            {note.code_snippet}
+                            <div className="absolute inset-0 bg-gradient-to-t from-zinc-50 via-transparent to-transparent pointer-events-none group-hover:from-white" />
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 scale-95 group-hover:scale-100">
+                        <Button
+                            size="icon"
+                            variant="secondary"
+                            className="h-7 w-7 bg-white shadow-sm border border-zinc-200 hover:bg-zinc-50 hover:text-primary hover:border-primary/30"
+                            onClick={(e) => handleCopy(e, note.code_snippet, note.id)}
+                        >
+                            {copiedId === note.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="secondary"
+                            className="h-7 w-7 bg-white shadow-sm border border-zinc-200 hover:bg-zinc-50 hover:text-primary hover:border-primary/30"
+                            onClick={(e) => handlePin(e, note.id)}
+                        >
+                            <Pin className={cn("w-3.5 h-3.5", note.is_pinned && "fill-primary text-primary")} />
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="secondary"
+                            className="h-7 w-7 bg-white shadow-sm border border-zinc-200 hover:bg-red-50 hover:text-destructive hover:border-red-200"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteNote(note);
+                            }}
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                    </div>
+                </Card>
+            )})}
+        </div>
+      ) : (
+        /* Empty State */
+        <div className="flex flex-col items-center justify-center py-20 text-center animate-in zoom-in-95 duration-300 px-4">
+            <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center shadow-sm mb-4 border border-zinc-100">
+                {searchQuery ? <Search className="w-6 h-6 text-zinc-300" /> : <FileCode className="w-6 h-6 text-zinc-300" />}
+            </div>
+            <h3 className="text-lg font-bold text-zinc-900">
+                {searchQuery ? "No matches found" : "Library Empty"}
+            </h3>
+            <p className="text-xs text-zinc-500 mt-1 max-w-xs mx-auto">
+                {searchQuery 
+                    ? "Try adjusting your filters or search terms."
+                    : "Create a note in Studio to see it appear here."}
+            </p>
+            {searchQuery && (
+                <Button variant="outline" size="sm" onClick={() => { setSearchQuery(""); setSelectedTags([]); }} className="mt-4 h-8 text-xs">
+                    Clear Search
+                </Button>
+            )}
         </div>
       )}
+
+      {/* Delete Modal */}
+      <Dialog open={!!deleteNote} onOpenChange={(open) => !open && setDeleteNote(null)}>
+        <DialogContent className="sm:max-w-[400px] p-0 gap-0 overflow-hidden border-destructive/20 shadow-2xl">
+            <div className="bg-destructive/10 p-6 flex flex-col items-center justify-center border-b border-destructive/10">
+                <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center shadow-sm mb-3">
+                    <AlertTriangle className="h-6 w-6 text-destructive" />
+                </div>
+                <DialogTitle className="text-destructive text-lg font-bold">Delete Item?</DialogTitle>
+                <DialogDescription className="text-center text-destructive/80 mt-1 flex flex-col gap-1">
+                    You are about to permanently delete
+                    <span className="font-bold text-foreground block text-lg">"{deleteNote?.title}"</span>
+                </DialogDescription>
+            </div>
+            <div className="p-6 bg-background">
+                <div className="text-sm text-muted-foreground text-center mb-6 leading-relaxed">
+                    This action <span className="font-bold text-foreground">cannot be undone</span>. All data associated with this note will be removed from our servers forever.
+                </div>
+                <div className="flex gap-3 justify-end">
+                    <Button variant="outline" onClick={() => setDeleteNote(null)} className="flex-1">Cancel</Button>
+                    <Button variant="destructive" onClick={executeDelete} disabled={deleteLoading} className="flex-1 bg-destructive hover:bg-destructive/90">
+                        {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                        Delete Forever
+                    </Button>
+                </div>
+            </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

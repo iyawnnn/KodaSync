@@ -4,7 +4,7 @@ import re
 
 def scrape_url(url: str):
     try:
-        # 🧠 SMART GITHUB HANDLING
+        # SMART GITHUB HANDLING
         # If user pastes a GitHub file UI link, convert to RAW link
         # Ex: github.com/user/repo/blob/main/file.py -> raw.githubusercontent.com/user/repo/main/file.py
         if "github.com" in url and "/blob/" in url:
@@ -46,10 +46,19 @@ def scrape_url(url: str):
         return None
 
 def detect_language(url: str):
-    if url.endswith(".py"): return "python"
-    if url.endswith(".ts") or url.endswith(".tsx"): return "typescript"
-    if url.endswith(".js") or url.endswith(".jsx"): return "javascript"
-    if url.endswith(".rs"): return "rust"
-    if url.endswith(".go"): return "go"
-    if url.endswith(".md"): return "markdown"
+    # Using a mapping is more efficient and easier to update.
+    extension_map = {
+        ".py": "python",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".rs": "rust",
+        ".go": "go",
+        ".md": "markdown"
+    }
+    
+    for ext, lang in extension_map.items():
+        if url.endswith(ext):
+            return lang
     return "text"

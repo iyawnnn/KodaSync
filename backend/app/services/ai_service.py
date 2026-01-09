@@ -44,7 +44,11 @@ def get_adaptive_system_prompt(context_str: str, project_name: str = None):
 
 def generate_tags(code_snippet: str, language: str):
     try:
-        prompt = "Analyze the code. Return ONLY a comma-separated list of 3-5 technical tags."
+        # 🚀 FIXED: Explicitly ask for Canonical Casing (e.g. MySQL, API, iOS)
+        prompt = (
+            "Analyze the code. Return ONLY a comma-separated list of 3-5 technical tags. "
+            "IMPORTANT: Use correct technical capitalization (e.g., 'MySQL' not 'mysql', 'API' not 'api', 'Next.js' not 'nextjs')."
+        )
         chat_completion = client.chat.completions.create(
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
             model=MODEL_FAST,
@@ -66,7 +70,7 @@ def explain_code_snippet(code_snippet: str, language: str):
         print(f"Error generating explanation: {e}")
         return "AI could not generate an explanation at this time."
 
-# --- 🚀 THE MAIN CHAT ENGINE ---
+# --- 💬 THE MAIN CHAT ENGINE ---
 def stream_chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Generator function using the Adaptive System Prompt.
@@ -93,7 +97,7 @@ def stream_chat_with_notes(context: str, question: str, history: list = [], proj
     except Exception as e:
         yield f"\n[System Error: {str(e)}]"
 
-# --- 👇 THE MISSING FUNCTION THAT CAUSED THE ERROR 👇 ---
+# --- 🔁 BACKWARD COMPATIBILITY WRAPPER ---
 def chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Non-streaming wrapper for backward compatibility.
@@ -104,7 +108,7 @@ def perform_ai_action(code_snippet: str, language: str, action: str = "fix", err
     """
     Executes specific engineering tasks with strict language enforcement.
     """
-    # 🚀 KEY FIX: Explicit rules for ambiguous languages like JS
+    # KEY FIX: Explicit rules for ambiguous languages like JS
     language_rules = ""
     if language.lower() in ["javascript", "typescript", "js", "ts"]:
         language_rules = "RULE: In JavaScript/TypeScript, replace 'print()' with 'console.log()' unless explicitly asking for window printing."
@@ -119,7 +123,6 @@ def perform_ai_action(code_snippet: str, language: str, action: str = "fix", err
         "test": f"Write Unit Tests using the standard testing library for {language}. {base_instruction}"
     }
 
-    # ... rest of the function remains the same
     selected_prompt = prompts.get(action, f"Improve this code. {base_instruction}")
 
     system_prompt = f"""

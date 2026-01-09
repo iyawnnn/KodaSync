@@ -8,13 +8,13 @@ class NoteBase(SQLModel):
     code_snippet: str
     language: str
 
-# FIX: Added project_id here
 class NoteCreate(NoteBase):
     project_id: Optional[uuid.UUID] = None 
 
 class NoteRead(NoteBase):
     id: uuid.UUID
     tags: Optional[str] = None
+    is_pinned: bool = False 
     created_at: datetime
     owner_id: uuid.UUID
     project_id: Optional[uuid.UUID] = None
@@ -25,7 +25,7 @@ class ExplainRequest(SQLModel):
 
 class ChatRequest(SQLModel):
     message: str
-    session_id: Optional[str] = None # <--- Added for Chat Sessions
+    session_id: Optional[str] = None
 
 class FixRequest(SQLModel):
     code_snippet: str
