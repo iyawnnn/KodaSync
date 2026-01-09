@@ -125,7 +125,7 @@
     @apply bg-background text-foreground;
   }
   
-  /* 🚀 GENERIC POINTER ENFORCEMENT */
+  /* Generic Pointer Enforcement */
   button, 
   a, 
   summary,
@@ -136,10 +136,7 @@
     @apply cursor-pointer;
   }
 
-  /* 🚀 SHADCN/RADIX UI OVERRIDES 
-     Using !important because these components have inline 'cursor-default' classes 
-     that override standard CSS rules.
-  */
+  /* Shadcn/Radix Overrides */
   [role="button"],
   [role="menuitem"],
   [role="menuitemcheckbox"],
@@ -152,14 +149,12 @@
     cursor: pointer !important;
   }
 
-  /* Explicit classes if needed */
   .cursor-pointer,
   .group.cursor-pointer,
   .hover\:cursor-pointer:hover {
     cursor: pointer !important;
   }
 
-  /* Correct disabled state - MUST be last to override the pointers above */
   :disabled, 
   [aria-disabled="true"],
   [data-disabled] {
@@ -168,6 +163,7 @@
 }
 
 @layer utilities {
+  /* Sidebar Scrollbar */
   .sidebar-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -186,19 +182,29 @@
   .sidebar-scrollbar:hover::-webkit-scrollbar-thumb:hover {
     background: #d4d4d8;
   }
-}
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground); 
-  border-radius: 4px;
-  opacity: 0.3;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  .main-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .main-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .main-scrollbar::-webkit-scrollbar-thumb {
+    background: #e4e4e7; 
+    border-radius: 99px;
+    border: 2px solid transparent; 
+    background-clip: content-box;
+  }
+  .main-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #d4d4d8; /* Zinc-300 */
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .dark .main-scrollbar::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+  }
+  .dark .main-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
 }
