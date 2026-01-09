@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     REDIS_URL: str
     
-    # GITHUB OAUTH (New)
+    # GITHUB OAUTH
     GITHUB_CLIENT_ID: str
     GITHUB_CLIENT_SECRET: str
     
