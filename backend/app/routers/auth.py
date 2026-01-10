@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer # <--- 1. ADDED OAuth2PasswordBearer
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -14,9 +14,12 @@ from ..services.auth_service import (
 )
 from ..config import settings
 
+# Rate Limiter Import
+from ..limiter import limiter
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# 2. DEFINE TOKEN SOURCE
+# DEFINE TOKEN SOURCE
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class TokenResponse(BaseModel):
@@ -27,7 +30,7 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
-# 3. NEW DEPENDENCY: GET CURRENT USER
+# NEW DEPENDENCY: GET CURRENT USER
 async def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
     """
     Decodes the token and retrieves the user from the database.
@@ -44,7 +47,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     
     return user
 
-# 4. NEW ENDPOINT: /ME
+# NEW ENDPOINT: /ME
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     """
@@ -52,10 +55,9 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     """
     return current_user
 
-# --- EXISTING ROUTES BELOW ---
-
 @router.post("/signup", response_model=UserRead)
-async def signup(user_data: UserCreate, session: Session = Depends(get_session)):
+@limiter.limit("5/minute") # Security: Rate Limit Signup
+async def signup(request: Request, user_data: UserCreate, session: Session = Depends(get_session)):
     existing_user = session.exec(select(User).where(User.email == user_data.email)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -72,10 +74,12 @@ async def signup(user_data: UserCreate, session: Session = Depends(get_session))
     return new_user
 
 @router.post("/login", response_model=TokenResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+@limiter.limit("10/minute") # Security: Rate Limit Login
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.email == form_data.username)).first()
     
     if not user:
+        # Security: Use generic message to prevent user enumeration (optional but recommended)
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
     # Check if they are a GitHub user trying to use a password

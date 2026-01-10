@@ -1,18 +1,15 @@
 from sqlmodel import SQLModel, create_engine, Session, text
-import os
+from .config import settings  # <--- IMPORT SETTINGS HERE
 
-# 1. Get the DB URL
-DATABASE_URL = os.getenv("DATABASE_URL")
+# 1. Create the engine using the URL from config (Pydantic loads the .env)
+engine = create_engine(settings.DATABASE_URL, echo=True)
 
-# 2. Create the engine
-engine = create_engine(DATABASE_URL, echo=True)
-
-# 3. Helper for getting a session
+# 2. Helper for getting a session
 def get_session():
     with Session(engine) as session:
         yield session
 
-# 4. Initialization Function (Matches main.py import)
+# 3. Initialization Function
 def init_db():
     # A. Enable Vector Extension (Critical for AI Search)
     with Session(engine) as session:
