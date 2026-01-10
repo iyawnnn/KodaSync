@@ -13,13 +13,10 @@ from ..services.auth_service import (
     create_access_token, create_refresh_token, decode_token
 )
 from ..config import settings
-
-# Rate Limiter Import
 from ..limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# DEFINE TOKEN SOURCE
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class TokenResponse(BaseModel):
@@ -30,11 +27,7 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
-# NEW DEPENDENCY: GET CURRENT USER
 async def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
-    """
-    Decodes the token and retrieves the user from the database.
-    """
     payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
@@ -47,17 +40,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     
     return user
 
-# NEW ENDPOINT: /ME
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    """
-    Get the current logged-in user's profile.
-    """
     return current_user
 
 @router.post("/signup", response_model=UserRead)
-@limiter.limit("5/minute") # Security: Rate Limit Signup
+@limiter.limit("5/minute")
 async def signup(request: Request, user_data: UserCreate, session: Session = Depends(get_session)):
+    # 🛡️ SECURITY: Password Strength Check
+    if len(user_data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+
     existing_user = session.exec(select(User).where(User.email == user_data.email)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -74,15 +67,13 @@ async def signup(request: Request, user_data: UserCreate, session: Session = Dep
     return new_user
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute") # Security: Rate Limit Login
+@limiter.limit("10/minute")
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.email == form_data.username)).first()
     
     if not user:
-        # Security: Use generic message to prevent user enumeration (optional but recommended)
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
-    # Check if they are a GitHub user trying to use a password
     if not user.password_hash:
         raise HTTPException(status_code=400, detail="Please log in with GitHub")
 
@@ -150,7 +141,6 @@ async def github_callback(code: str, session: Session = Depends(get_session)):
         
         access_token = token_data["access_token"]
         
-        # Get User & Email
         user_res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}"})
         user_github_data = user_res.json()
         
@@ -163,7 +153,6 @@ async def github_callback(code: str, session: Session = Depends(get_session)):
 
     user = session.exec(select(User).where(User.email == primary_email)).first()
     
-    # Create or Update User
     if not user:
         user = User(
             email=primary_email,
@@ -191,5 +180,5 @@ async def github_callback(code: str, session: Session = Depends(get_session)):
     session.add(user)
     session.commit()
 
-    frontend_url = f"http://localhost:3000/auth/callback?access_token={access_token_jwt}&refresh_token={refresh_token_jwt}"
+    frontend_url = f"{settings.FRONTEND_URL}/auth/callback?access_token={access_token_jwt}&refresh_token={refresh_token_jwt}"
     return RedirectResponse(url=frontend_url)
