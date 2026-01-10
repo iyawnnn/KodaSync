@@ -1,15 +1,15 @@
-import os
 import re 
 from groq import Groq
+from ..config import settings 
 
 client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY"),
+    api_key=settings.GROQ_API_KEY,
 )
 
 MODEL_SMART = "llama-3.3-70b-versatile" 
 MODEL_FAST = "llama-3.1-8b-instant"
 
-# --- 🧠 DYNAMIC SYSTEM PROMPT ---
+# --- DYNAMIC SYSTEM PROMPT ---
 def get_adaptive_system_prompt(context_str: str, project_name: str = None):
     # If a project is selected, we inject it into the identity
     project_context = f"You are working on the project: '{project_name}'." if project_name else "You are acting as a General Technical Consultant."
@@ -44,7 +44,6 @@ def get_adaptive_system_prompt(context_str: str, project_name: str = None):
 
 def generate_tags(code_snippet: str, language: str):
     try:
-        # 🚀 FIXED: Explicitly ask for Canonical Casing (e.g. MySQL, API, iOS)
         prompt = (
             "Analyze the code. Return ONLY a comma-separated list of 3-5 technical tags. "
             "IMPORTANT: Use correct technical capitalization (e.g., 'MySQL' not 'mysql', 'API' not 'api', 'Next.js' not 'nextjs')."
@@ -70,7 +69,7 @@ def explain_code_snippet(code_snippet: str, language: str):
         print(f"Error generating explanation: {e}")
         return "AI could not generate an explanation at this time."
 
-# --- 💬 THE MAIN CHAT ENGINE ---
+# --- THE MAIN CHAT ENGINE ---
 def stream_chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Generator function using the Adaptive System Prompt.
@@ -97,7 +96,7 @@ def stream_chat_with_notes(context: str, question: str, history: list = [], proj
     except Exception as e:
         yield f"\n[System Error: {str(e)}]"
 
-# --- 🔁 BACKWARD COMPATIBILITY WRAPPER ---
+# --- 🔌 BACKWARD COMPATIBILITY WRAPPER ---
 def chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Non-streaming wrapper for backward compatibility.

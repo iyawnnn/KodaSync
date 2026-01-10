@@ -3,14 +3,15 @@ version: '3.8'
 services:
   # Database: PostgreSQL with pgvector extension pre-installed
   db:
-    image: pgvector/pgvector:pg16 # <--- UPDATED for Vector Search
+    image: pgvector/pgvector:pg16 
     container_name: kodasync_db
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      # HARDCODED credentials to force correct user creation
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: kodasync_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -35,7 +36,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      # These still use variables because they read from the container's env, not creation time
+      DATABASE_URL: postgresql://admin:password123@db:5432/kodasync_db
       REDIS_URL: redis://redis:6379/0
       GROQ_API_KEY: ${GROQ_API_KEY}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}

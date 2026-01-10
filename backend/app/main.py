@@ -5,6 +5,7 @@ from .routers import auth, notes, chat, projects
 from .database import init_db
 from .limiter import limiter
 from slowapi.errors import RateLimitExceeded
+from .config import settings
 
 app = FastAPI(title="KodaSync API", version="1.0.0")
 
@@ -15,27 +16,30 @@ app.add_exception_handler(RateLimitExceeded, lambda r, e: JSONResponse(status_co
 # 2. GLOBAL Error Handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"🔥 CRITICAL ERROR: {exc}") 
+    print(f"CRITICAL ERROR: {exc}") 
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error"},
     )
 
-# 3. CORS SECURITY (Deployment Ready)
+# 3. CORS SECURITY (Locked Down)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     # Allow Vercel Deployments (Wildcard for previews)
-    "https://*.vercel.app",
-    # ⚠️ TEMP: Allow all to prevent headaches during first deploy
-    "*" 
+    "https://kodasync.com",
+    "https://www.kodasync.com",
 ]
+
+# If we are in dev, we can be slightly more permissive
+if settings.ENVIRONMENT == "development":
+    origins.append("*")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins, 
     allow_credentials=True,
-    allow_methods=["*"], 
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], 
     allow_headers=["*"], 
 )
 
@@ -49,6 +53,8 @@ app.include_router(notes.router)
 app.include_router(chat.router)    
 app.include_router(projects.router) 
 
+# --- RATE LIMITED ROOT ENDPOINT ---
 @app.get("/")
-def read_root():
-    return {"status": "active", "system": "KodaSync Neural Core"}
+@limiter.limit("5/minute") # Limits this specific endpoint to 5 requests per minute
+def read_root(request: Request): # 'request' is REQUIRED for the limiter to identify the user
+    return {"status": "active", "system": "KodaSync Neural Core", "env": settings.ENVIRONMENT}
