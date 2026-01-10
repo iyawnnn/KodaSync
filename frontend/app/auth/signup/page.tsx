@@ -50,6 +50,13 @@ export default function SignupPage() {
     setLoading(true);
     setError("");
 
+    // --- 🛡️ UI/UX IMPROVEMENT: Validate Password Strength ---
+    if (password.length < 8) {
+        setError("Password is too weak. It must be at least 8 characters long.");
+        setLoading(false);
+        return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match");
       setLoading(false);
@@ -220,6 +227,7 @@ export default function SignupPage() {
                 </div>
               </div>
 
+              {/* 🛡️ ERROR ALERT BOX */}
               {error && (
                 <div className="p-2.5 text-xs text-red-500 bg-red-50 border border-red-100 rounded-md flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />

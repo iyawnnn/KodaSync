@@ -27,8 +27,9 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     # Allow Vercel Deployments (Wildcard for previews)
-    "https://kodasync.com",
-    "https://www.kodasync.com",
+    "https://*.vercel.app",
+    "kodasync.vercel.app",
+    "kodasync.iansebastian.dev",
 ]
 
 # If we are in dev, we can be slightly more permissive
