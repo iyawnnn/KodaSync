@@ -67,17 +67,37 @@ export default function SignupPage() {
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+      // 1. Create the Account
       await axios.post(`${API_URL}/auth/signup`, {
         full_name: fullName,
         email,
         password,
       });
 
-      toast.success("Account created successfully!");
-      setTimeout(() => router.push("/auth/login"), 1000);
+      // 2. 🚀 AUTO-LOGIN: Immediately get the token
+      // We use URLSearchParams because the OAuth2 login endpoint expects Form Data, not JSON.
+      const loginData = new URLSearchParams();
+      loginData.append("username", email);
+      loginData.append("password", password);
+
+      const loginRes = await axios.post(`${API_URL}/auth/login`, loginData, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      // 3. Save Token & Redirect
+      const token = loginRes.data.access_token;
+      // Set cookie secure only in production if needed, but basic path=/ works for both
+      document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`; 
+      
+      toast.success("Account created! Redirecting...");
+      setTimeout(() => router.push("/dashboard"), 500); // 🚀 Redirects to Dashboard
+
     } catch (err: any) {
       let errorMessage = "Failed to create account.";
       if (isAxiosError(err)) {
+        // Handle specific "Email taken" error from backend
         errorMessage =
           err.response?.data?.detail || "Email might already be taken.";
       }
@@ -186,6 +206,7 @@ export default function SignupPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-10 border-gray-200 focus-visible:ring-green-600 transition-all pr-10"
+                    placeholder="••••••••" 
                     required
                   />
                   <button
@@ -211,6 +232,7 @@ export default function SignupPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="h-10 border-gray-200 focus-visible:ring-green-600 transition-all pr-10"
+                    placeholder="••••••••"
                     required
                   />
                   <button

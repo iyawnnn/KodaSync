@@ -1,8 +1,9 @@
 import re 
-from groq import Groq
+from groq import AsyncGroq # <--- UPDATED: Use AsyncClient
 from ..config import settings 
 
-client = Groq(
+# Initialize Async Client
+client = AsyncGroq(
     api_key=settings.GROQ_API_KEY,
 )
 
@@ -11,7 +12,6 @@ MODEL_FAST = "llama-3.1-8b-instant"
 
 # --- DYNAMIC SYSTEM PROMPT ---
 def get_adaptive_system_prompt(context_str: str, project_name: str = None):
-    # If a project is selected, we inject it into the identity
     project_context = f"You are working on the project: '{project_name}'." if project_name else "You are acting as a General Technical Consultant."
 
     return f"""
@@ -42,13 +42,13 @@ def get_adaptive_system_prompt(context_str: str, project_name: str = None):
        - For pros/cons or comparisons, use Tables.
     """
 
-def generate_tags(code_snippet: str, language: str):
+async def generate_tags(code_snippet: str, language: str):
     try:
         prompt = (
             "Analyze the code. Return ONLY a comma-separated list of 3-5 technical tags. "
             "IMPORTANT: Use correct technical capitalization (e.g., 'MySQL' not 'mysql', 'API' not 'api', 'Next.js' not 'nextjs')."
         )
-        chat_completion = client.chat.completions.create(
+        chat_completion = await client.chat.completions.create( # <--- AWAIT
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
             model=MODEL_FAST,
         )
@@ -57,10 +57,10 @@ def generate_tags(code_snippet: str, language: str):
         print(f"Error generating tags: {e}")
         return "untagged"
     
-def explain_code_snippet(code_snippet: str, language: str):
+async def explain_code_snippet(code_snippet: str, language: str):
     try:
         prompt = "You are a Senior Engineer. Explain this code clearly to a colleague. Be concise."
-        chat_completion = client.chat.completions.create(
+        chat_completion = await client.chat.completions.create( # <--- AWAIT
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": code_snippet}],
             model=MODEL_SMART,
         )
@@ -70,44 +70,48 @@ def explain_code_snippet(code_snippet: str, language: str):
         return "AI could not generate an explanation at this time."
 
 # --- THE MAIN CHAT ENGINE ---
-def stream_chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
+async def stream_chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Generator function using the Adaptive System Prompt.
     """
     try:
-        # Pass project_name to the prompt generator
         system_prompt = get_adaptive_system_prompt(context, project_name)
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
         messages.append({"role": "user", "content": question})
         
-        stream = client.chat.completions.create(
+        # <--- AWAIT THE STREAM CREATION
+        stream = await client.chat.completions.create(
             messages=messages,
             model=MODEL_SMART,
             temperature=0.3, 
             stream=True 
         )
 
-        for chunk in stream:
+        # <--- ASYNC FOR LOOP
+        async for chunk in stream:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
     except Exception as e:
+        print(f"Streaming Error: {e}") 
         yield f"\n[System Error: {str(e)}]"
 
-# --- 🔌 BACKWARD COMPATIBILITY WRAPPER ---
-def chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
+# --- BACKWARD COMPATIBILITY WRAPPER ---
+async def chat_with_notes(context: str, question: str, history: list = [], project_name: str = None):
     """
     Non-streaming wrapper for backward compatibility.
     """
-    return "".join(stream_chat_with_notes(context, question, history, project_name))
+    response_text = ""
+    async for chunk in stream_chat_with_notes(context, question, history, project_name):
+        response_text += chunk
+    return response_text
 
-def perform_ai_action(code_snippet: str, language: str, action: str = "fix", error_msg: str = ""):
+async def perform_ai_action(code_snippet: str, language: str, action: str = "fix", error_msg: str = ""):
     """
     Executes specific engineering tasks with strict language enforcement.
     """
-    # KEY FIX: Explicit rules for ambiguous languages like JS
     language_rules = ""
     if language.lower() in ["javascript", "typescript", "js", "ts"]:
         language_rules = "RULE: In JavaScript/TypeScript, replace 'print()' with 'console.log()' unless explicitly asking for window printing."
@@ -131,7 +135,7 @@ def perform_ai_action(code_snippet: str, language: str, action: str = "fix", err
     """
 
     try:
-        chat_completion = client.chat.completions.create(
+        chat_completion = await client.chat.completions.create( # <--- AWAIT
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": code_snippet}
@@ -145,12 +149,12 @@ def perform_ai_action(code_snippet: str, language: str, action: str = "fix", err
         print(f"Error in AI Action ({action}): {e}")
         return f"// Error: Could not perform {action}."
     
-def generate_chat_title(first_message: str):
+async def generate_chat_title(first_message: str):
     """
     Generates a short, 3-5 word title for the chat based on the first message.
     """
     try:
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create( # <--- AWAIT
             messages=[
                 {
                     "role": "system",
