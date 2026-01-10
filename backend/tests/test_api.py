@@ -10,6 +10,21 @@ from unittest.mock import patch, MagicMock
 
 client = TestClient(app)
 
+# --- 🚀 NEW HELPER CLASS ---
+# This mimics the behavior of the AI Stream for tests
+class AsyncIterator:
+    def __init__(self, items):
+        self.items = iter(items)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.items)
+        except StopIteration:
+            raise StopAsyncIteration
+
 def get_test_engine():
     return create_engine(settings.DATABASE_URL)
 
@@ -26,12 +41,8 @@ def create_test_user(session: Session):
     session.refresh(user)
     return user
 
-# --- GLOBAL REDIS MOCK ---
 @pytest.fixture(autouse=True)
 def mock_redis():
-    """
-    Automatically mock Redis for ALL tests.
-    """
     with patch("app.services.cache_service.redis_client") as mock:
         mock.scan_iter.return_value = []
         mock.get.return_value = None
@@ -42,38 +53,28 @@ def mock_redis():
 @pytest.fixture(name="auth_headers")
 def auth_headers_fixture():
     engine = get_test_engine()
-    
-    # 2. Enable Vector Extension
     with Session(engine) as session:
         session.exec(text("CREATE EXTENSION IF NOT EXISTS vector"))
         session.commit()
-
-    # 3. Create Tables
     SQLModel.metadata.create_all(engine)
     
     with Session(engine) as session:
         user = create_test_user(session)
-        
-        # Override Auth
         app.dependency_overrides = {} 
         from app.routers.notes import get_current_user
         app.dependency_overrides[get_current_user] = lambda: user
-        
         yield user 
         
-        # Cleanup
         app.dependency_overrides = {}
         user_to_delete = session.get(User, user.id)
         if user_to_delete:
+            # Cleanup logic...
             notes = session.exec(select(Note).where(Note.owner_id == user.id)).all()
             for note in notes: session.delete(note)
-
             projects = session.exec(select(Project).where(Project.owner_id == user.id)).all()
             for proj in projects: session.delete(proj)
-
             sessions = session.exec(select(ChatSession).where(ChatSession.user_id == user.id)).all()
             for s in sessions: session.delete(s)
-            
             session.delete(user_to_delete)
             session.commit()
 
@@ -81,7 +82,12 @@ def auth_headers_fixture():
 
 @patch("app.routers.notes.generate_tags") 
 def test_create_note(mock_tags, auth_headers):
-    mock_tags.return_value = ["mock", "tag"]
+    # NOTE: generate_tags is likely async in your code now too. 
+    # If it is, use: mock_tags.return_value = "mock, tag" (if awaited)
+    # But for now assuming it handles the return value correctly or is mocked higher up.
+    # Ideally, patch the Service, not the Router function if possible, or use AsyncMock.
+    mock_tags.return_value = "mock, tag" 
+    
     payload = {
         "title": "Integration Test Note",
         "code_snippet": "print('Hello World')",
@@ -94,7 +100,7 @@ def test_create_note(mock_tags, auth_headers):
 
 def test_search_note(auth_headers):
     with patch("app.routers.notes.generate_tags") as mock_tags:
-        mock_tags.return_value = []
+        mock_tags.return_value = "tag"
         client.post("/notes/", json={"title": "Search Me", "code_snippet": "pass", "language": "python"})
     
     response = client.get("/notes/search/?q=Search")
@@ -102,7 +108,7 @@ def test_search_note(auth_headers):
 
 def test_delete_lifecycle(auth_headers):
     with patch("app.routers.notes.generate_tags") as mock_tags:
-        mock_tags.return_value = []
+        mock_tags.return_value = "tag"
         create_res = client.post("/notes/", json={"title": "Del", "code_snippet": "x=1", "language": "py"})
     
     note_id = create_res.json()["id"]
@@ -111,44 +117,39 @@ def test_delete_lifecycle(auth_headers):
 
 @patch("app.routers.notes.perform_ai_action")
 def test_auto_fix_endpoint(mock_ai, auth_headers):
+    # If perform_ai_action is async, we mock the return value directly 
+    # because FastApi handles the await when calling the controller
     mock_ai.return_value = "fixed"
     response = client.post("/notes/fix/", json={"code_snippet": "bug", "language": "python"})
     assert response.status_code == 200
     assert response.json()["fixed_code"] == "fixed"
 
-# --- 🚀 FIX: Patch the Router import, NOT the Service definition ---
 @patch("app.routers.chat.stream_chat_with_notes")
 def test_chat_rag(mock_stream, auth_headers):
-    # Mock return must be iterable (list of chunks)
-    mock_stream.return_value = ["Mock Answer"]
+    # 🚀 FIX: Use AsyncIterator so 'async for' works in the router
+    mock_stream.return_value = AsyncIterator(["Mock Answer"])
     
-    # 1. Start Session
     sess_res = client.post("/chat/sessions")
     session_id = sess_res.json()["id"]
 
-    # 2. Chat
     response = client.post(f"/chat/{session_id}", json={"message": "Hi"})
     
     assert response.status_code == 200
-    # Streaming response is text, not JSON
     assert response.text == "Mock Answer"
 
 @patch("app.routers.chat.stream_chat_with_notes")
 def test_chat_memory(mock_stream, auth_headers):
-    # Mock return must be iterable
-    mock_stream.return_value = ["Memory Answer"]
+    # 🚀 FIX: Use AsyncIterator here too
+    mock_stream.return_value = AsyncIterator(["Memory Answer"])
     
     sess_res = client.post("/chat/sessions")
     session_id = sess_res.json()["id"]
     
-    # Send message
     client.post(f"/chat/{session_id}", json={"message": "Test"})
     
-    # Check History
     hist_res = client.get(f"/chat/sessions/{session_id}/messages")
     assert hist_res.status_code == 200
     messages = hist_res.json()
     
-    # Verify AI response was saved
     assert len(messages) >= 2 
     assert messages[-1]["content"] == "Memory Answer"

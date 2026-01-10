@@ -70,13 +70,14 @@ def get_current_user(
         raise credentials_exception
 
 
-# --- Background Task ---
-def process_note_ai(
+# --- Background Task (UPDATED TO ASYNC) ---
+async def process_note_ai(
     note_id: uuid.UUID, user_id: uuid.UUID, title: str, code: str, language: str
 ):
     try:
         print(f"⚙️ Background: Generating AI tags for note {note_id}...")
-        ai_tags = generate_tags(code, language)
+        # 🚀 FIX: Await the async tag generation
+        ai_tags = await generate_tags(code, language)
         combined_text = f"{title} \n {code}"
         vector = get_vector(combined_text)
 
@@ -167,6 +168,7 @@ async def create_note(
     session.commit()
     session.refresh(new_note)
 
+    # FastAPI handles async background tasks automatically
     background_tasks.add_task(
         process_note_ai,
         new_note.id,
@@ -219,7 +221,6 @@ async def search_notes(
     return clean_results
 
 
-# 🚀 FIXED: Normalizes tags to Title Case to prevent duplicates (e.g. "python" == "Python")
 @router.get("/tags/")
 async def get_user_tags(
     current_user: User = Depends(get_current_user),
@@ -230,7 +231,6 @@ async def get_user_tags(
     tag_counter = Counter()
     for tag_str in results:
         if tag_str:
-            # 🎨 Split, Strip, and Title Case every tag
             tags = [t.strip().title() for t in tag_str.split(",")]
             tag_counter.update(tags)
     return [tag for tag, count in tag_counter.most_common()]
@@ -261,7 +261,8 @@ async def update_note(
 
     if note_data.code_snippet is not None:
         note.code_snippet = note_data.code_snippet
-        note.tags = generate_tags(note.code_snippet, note.language)
+        # 🚀 FIX: Await generate_tags
+        note.tags = await generate_tags(note.code_snippet, note.language)
     
     if note_data.title is not None or note_data.code_snippet is not None:
         note.embedding = get_vector(f"{note.title} \n {note.code_snippet}")
@@ -328,7 +329,8 @@ async def explain_note(
     if cached_result:
         return cached_result
     
-    explanation = explain_code_snippet(body.code_snippet, body.language)
+    # 🚀 FIX: Await explain_code_snippet
+    explanation = await explain_code_snippet(body.code_snippet, body.language)
     response_data = {"explanation": explanation}
     set_simple_cache(cache_key, response_data)
     return response_data
@@ -348,7 +350,8 @@ async def fix_code(
     if cached_result:
         return cached_result
     
-    result_code = perform_ai_action(
+    # 🚀 FIX: Await perform_ai_action
+    result_code = await perform_ai_action(
         body.code_snippet, body.language, body.action, body.error_message
     )
     response_data = {"fixed_code": result_code}
