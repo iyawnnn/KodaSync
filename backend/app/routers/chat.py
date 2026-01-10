@@ -4,7 +4,7 @@ from sqlmodel import Session, select, delete, col
 from ..database import get_session
 from ..models import ChatSession, ChatMessage, User, Note, Project
 from ..routers.notes import get_current_user
-from ..services.ai_service import stream_chat_with_notes, generate_chat_title # <--- ADDED IMPORT
+from ..services.ai_service import stream_chat_with_notes, generate_chat_title
 from ..services.vector_service import get_vector
 from ..services.cache_service import get_cache, set_simple_cache 
 from ..limiter import limiter
@@ -21,30 +21,19 @@ class ChatRequest(BaseModel):
 
 # --- HELPER: Delete Empty Sessions ---
 def cleanup_empty_sessions(session: Session, user_id: uuid.UUID, exclude_id: Optional[uuid.UUID] = None):
-    """
-    Deletes any chat session that has NO messages.
-    Keeps 'exclude_id' safe (useful if we just created it).
-    """
     try:
-        # Find IDs of sessions that HAVE messages
         active_session_ids = select(ChatMessage.session_id).distinct()
-        
-        # Select sessions owned by user that are NOT in the active list
         statement = delete(ChatSession).where(
             ChatSession.user_id == user_id,
             col(ChatSession.id).notin_(active_session_ids)
         )
-        
-        # If we want to protect a specific ID (like the one we are currently looking at), exclude it
         if exclude_id:
             statement = statement.where(ChatSession.id != exclude_id)
-            
         session.exec(statement)
         session.commit()
     except Exception as e:
         print(f"Cleanup warning: {e}")
 
-# 1. Create Session: Auto-Cleanup Old Empty Ones
 @router.post("/sessions", response_model=ChatSession)
 @limiter.limit("20/minute") 
 async def create_session(
@@ -52,17 +41,13 @@ async def create_session(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ):
-    # 1. Cleanup old empty sessions first
     cleanup_empty_sessions(session, current_user.id)
-
-    # 2. Create new session
     new_session = ChatSession(user_id=current_user.id, title="New Conversation")
     session.add(new_session)
     session.commit()
     session.refresh(new_session)
     return new_session
 
-# 2. Get Sessions: Auto-Cleanup Before Listing
 @router.get("/sessions", response_model=list[ChatSession])
 @limiter.limit("50/minute")
 async def get_sessions(
@@ -70,17 +55,13 @@ async def get_sessions(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ):
-    # 1. Cleanup empty sessions so the sidebar is clean
     cleanup_empty_sessions(session, current_user.id)
-
-    # 2. Return valid list
     statement = select(ChatSession).where(ChatSession.user_id == current_user.id).order_by(
         ChatSession.is_pinned.desc(),
         ChatSession.created_at.desc()
     )
     return session.exec(statement).all()
 
-# 3. Get Messages: Handle 404 Gracefully
 @router.get("/sessions/{session_id}/messages")
 @limiter.limit("100/minute")
 async def get_session_messages(
@@ -93,14 +74,11 @@ async def get_session_messages(
     except: raise HTTPException(status_code=400)
     
     chat_session = session.get(ChatSession, s_uuid)
-    
-    # If not found, return 404 so frontend can handle it
     if not chat_session or chat_session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
         
     return chat_session.messages
 
-# 4. Send Message: Standard Logic
 @router.post("/{session_id}")
 @limiter.limit("10/minute") 
 async def send_message(
@@ -125,15 +103,13 @@ async def send_message(
             yield cached.get("response", "")
         return StreamingResponse(cached_gen(), media_type="text/plain")
 
-    # 🚀 AI TITLE GENERATION 🚀
-    # If this is a new chat, ask AI to name it based on the first message
+    # AI TITLE GENERATION (Async) 
     if chat_session.title in ["New Conversation", "New Chat"]:
         try:
-            # Generate title (doesn't block much since it's a fast LLM call)
-            new_title = generate_chat_title(body.message)
+            # AWAIT the async generator
+            new_title = await generate_chat_title(body.message)
             chat_session.title = new_title
             session.add(chat_session)
-            # We don't commit yet; we commit when saving the message below
         except Exception as e:
             print(f"Title generation error: {e}")
 
@@ -156,13 +132,14 @@ async def send_message(
     # Save User Message
     user_msg = ChatMessage(role="user", content=body.message, session_id=s_uuid)
     session.add(user_msg)
-    session.commit() # This saves the Title update AND the User message
+    session.commit()
 
     history = [{"role": m.role, "content": m.content} for m in chat_session.messages]
 
     async def response_generator():
         full_response = ""
-        for chunk in stream_chat_with_notes(context_str, body.message, history, project_name=project_name):
+        # ASYNC ITERATION OVER STREAM
+        async for chunk in stream_chat_with_notes(context_str, body.message, history, project_name=project_name):
             full_response += chunk
             yield chunk
 

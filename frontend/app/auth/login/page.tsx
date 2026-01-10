@@ -160,6 +160,7 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type={isVisible ? "text" : "password"}
+                    placeholder="••••••••" 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-10 border-gray-200 focus-visible:ring-green-600 transition-all pr-10"
