@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { motion, AnimatePresence } from "framer-motion";
 
 const SUGGESTION_POOL = [
   { label: "Refactor Code", text: "Refactor this code to be more clean, efficient, and modern:", icon: Code2 },
@@ -362,49 +361,40 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none z-10" />
       </div>
 
-      {/* Animated Layout Wrapper for Empty State and Omnibar */}
-      <motion.div 
-        layout
+      {/* Standard Layout Wrapper for Empty State and Omnibar (Instant) */}
+      <div 
         className={cn(
           "w-full px-4 flex flex-col",
           (messages.length === 0 && !isFetchingHistory) ? "flex-1 items-center justify-center" : "flex-none pb-2 pt-1 z-20 bg-background"
         )}
       >
-        <AnimatePresence>
-          {(messages.length === 0 && !isFetchingHistory) && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
-              transition={{ duration: 0.3 }}
-              className="w-full max-w-3xl text-center mb-8 flex flex-col items-center"
-            >
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-primary mb-3">
-                  {greeting}, {userName}
-              </h1>
-              <p className="text-lg md:text-xl text-muted-foreground mb-10">
-                  How can I help you code today?
-              </p>
+        {(messages.length === 0 && !isFetchingHistory) && (
+          <div className="w-full max-w-3xl text-center mb-8 flex flex-col items-center">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-primary mb-3">
+                {greeting}, {userName}
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground mb-10">
+                How can I help you code today?
+            </p>
 
-              <div className="flex flex-wrap justify-center gap-3">
-                  {activeSuggestions.map((s, i) => (
-                      <button
-                          key={i}
-                          onClick={() => handleSuggestionClick(s.text)}
-                          className="group flex items-center gap-2.5 px-5 py-3 rounded-full border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 shadow-sm hover:shadow-md"
-                      >
-                          <s.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                          <span className="font-medium text-sm text-foreground/80 group-hover:text-foreground transition-colors">
-                              {s.label}
-                          </span>
-                      </button>
-                  ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <div className="flex flex-wrap justify-center gap-3">
+                {activeSuggestions.map((s, i) => (
+                    <button
+                        key={i}
+                        onClick={() => handleSuggestionClick(s.text)}
+                        className="group flex items-center gap-2.5 px-5 py-3 rounded-full border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 shadow-sm hover:shadow-md"
+                    >
+                        <s.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <span className="font-medium text-sm text-foreground/80 group-hover:text-foreground transition-colors">
+                            {s.label}
+                        </span>
+                    </button>
+                ))}
+            </div>
+          </div>
+        )}
 
-        <motion.div layout className="max-w-4xl mx-auto w-full relative">
+        <div className="max-w-4xl mx-auto w-full relative">
           <div className="bg-card border border-border shadow-md rounded-[24px] p-2 flex items-end gap-2 transition-shadow focus-within:shadow-xl focus-within:border-primary/40">
               
               <Popover open={isToolsOpen} onOpenChange={setIsToolsOpen}>
@@ -513,11 +503,11 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
               </div>
           </div>
           
-          <motion.p layout="position" className="text-center text-[10px] text-muted-foreground mt-1.5 font-medium opacity-60">
+          <p className="text-center text-[10px] text-muted-foreground mt-1.5 font-medium opacity-60">
               KodaSync AI can make mistakes. Please verify important code.
-          </motion.p>
-        </motion.div>
-      </motion.div>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

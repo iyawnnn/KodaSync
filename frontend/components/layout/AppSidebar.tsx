@@ -218,7 +218,6 @@ export function AppSidebar({
   const handlePin = async (item: any, type: "session" | "project") => {
     const newStatus = !item.is_pinned;
 
-    // Optimistic update
     if (type === "session") {
       setSessions(sessions.map((s) => s.id === item.id ? { ...s, is_pinned: newStatus } : s));
     } else if (type === "project") {
@@ -232,16 +231,16 @@ export function AppSidebar({
         await api.patch(`/projects/${item.id}`, { is_pinned: newStatus });
       }
     } catch (error: any) {
-      // Revert state if the server request fails
       if (type === "session") {
         setSessions(sessions.map((s) => s.id === item.id ? { ...s, is_pinned: !newStatus } : s));
       } else if (type === "project") {
         setProjects(projects.map((p) => p.id === item.id ? { ...p, is_pinned: !newStatus } : p));
       }
       
-      toast.error("Database Migration Required", {
-        description: "Please delete your 'dev.db' file and restart the backend server so the new column is added.",
-      });
+      // THIS IS THE FIX: Extract the actual backend error
+      const backendError = error.response?.data?.detail || error.message || "Unknown error";
+      toast.error(`Pin Failed: ${backendError}`);
+      console.error("Full Pin Error:", error.response || error);
     }
   };
 
