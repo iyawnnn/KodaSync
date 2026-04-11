@@ -23,6 +23,7 @@ import {
   Layers,
 } from "lucide-react";
 import { NavUser } from "@/components/layout/NavUser";
+import { CommandTrigger } from "@/components/shared/CommandTrigger";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -154,7 +155,7 @@ export function AppSidebar({
   const confirmDelete = (
     e: React.MouseEvent,
     item: any,
-    type: "session" | "project" | "note"
+    type: "session" | "project" | "note",
   ) => {
     e.stopPropagation();
     setDeleteItem({
@@ -194,7 +195,7 @@ export function AppSidebar({
   const openRenameDialog = (
     e: React.MouseEvent,
     item: any,
-    type: "session" | "project" | "note"
+    type: "session" | "project" | "note",
   ) => {
     e.stopPropagation();
     setRenameItem({ id: item.id, type, currentName: item.title || item.name });
@@ -211,18 +212,18 @@ export function AppSidebar({
       if (type === "session") {
         await api.patch(`/chat/sessions/${id}`, { title: newName });
         setSessions(
-          sessions.map((s) => (s.id === id ? { ...s, title: newName } : s))
+          sessions.map((s) => (s.id === id ? { ...s, title: newName } : s)),
         );
         if (currentSessionId === id) onSelectSession(id, newName);
       } else if (type === "project") {
         await api.patch(`/projects/${id}`, { name: newName });
         setProjects(
-          projects.map((p) => (p.id === id ? { ...p, name: newName } : p))
+          projects.map((p) => (p.id === id ? { ...p, name: newName } : p)),
         );
       } else if (type === "note") {
         await api.put(`/notes/${id}`, { title: newName });
         setNotes(
-          notes.map((n) => (n.id === id ? { ...n, title: newName } : n))
+          notes.map((n) => (n.id === id ? { ...n, title: newName } : n)),
         );
       }
       toast.success("Renamed successfully");
@@ -237,7 +238,7 @@ export function AppSidebar({
   const handlePin = async (
     e: React.MouseEvent,
     item: any,
-    type: "session" | "project"
+    type: "session" | "project",
   ) => {
     e.stopPropagation();
     try {
@@ -245,15 +246,15 @@ export function AppSidebar({
       if (type === "session") {
         setSessions(
           sessions.map((s) =>
-            s.id === item.id ? { ...s, is_pinned: newStatus } : s
-          )
+            s.id === item.id ? { ...s, is_pinned: newStatus } : s,
+          ),
         );
         await api.patch(`/chat/sessions/${item.id}`, { is_pinned: newStatus });
       } else if (type === "project") {
         setProjects(
           projects.map((p) =>
-            p.id === item.id ? { ...p, is_pinned: newStatus } : p
-          )
+            p.id === item.id ? { ...p, is_pinned: newStatus } : p,
+          ),
         );
         await api.patch(`/projects/${item.id}`, { is_pinned: newStatus });
       }
@@ -269,13 +270,13 @@ export function AppSidebar({
   };
 
   const filteredSessions = sessions.filter((s) =>
-    (s.title || "").toLowerCase().includes(searchQuery.toLowerCase())
+    (s.title || "").toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const filteredProjects = projects.filter((p) =>
-    (p.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+    (p.name || "").toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const filteredNotes = notes.filter((n) =>
-    (n.title || "").toLowerCase().includes(searchQuery.toLowerCase())
+    (n.title || "").toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const renderList = () => {
@@ -290,7 +291,7 @@ export function AppSidebar({
           label={s.title || "Untitled Chat"}
           subLabel={new Date(s.updated_at || Date.now()).toLocaleDateString(
             undefined,
-            { month: "short", day: "numeric" }
+            { month: "short", day: "numeric" },
           )}
           isActive={s.id === currentSessionId}
           isPinned={s.is_pinned}
@@ -441,7 +442,7 @@ export function AppSidebar({
                     className="object-cover"
                   />
                 </div>
-                
+
                 <div className="flex flex-col group-data-[collapsible=icon]:hidden transition-opacity duration-200">
                   <span className="text-base font-bold tracking-tight text-sidebar-foreground leading-none">
                     KodaSync
@@ -452,6 +453,10 @@ export function AppSidebar({
                     </span>
                   </div>
                 </div>
+              </div>
+
+              <div className="mb-4 group-data-[collapsible=icon]:hidden transition-opacity duration-200">
+                <CommandTrigger />
               </div>
 
               {/* TABS */}
@@ -468,7 +473,7 @@ export function AppSidebar({
                               "flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ease-out group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:rounded-lg",
                               isActive
                                 ? "bg-sidebar-background text-sidebar-foreground shadow-sm ring-1 ring-sidebar-border group-data-[collapsible=icon]:bg-sidebar-accent"
-                                : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                                : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                             )}
                           >
                             <tab.icon
@@ -570,15 +575,15 @@ export function AppSidebar({
                   {activeTab === "chat"
                     ? "Conversations"
                     : activeTab === "create"
-                    ? "Saved Notes"
-                    : "Projects"}
+                      ? "Saved Notes"
+                      : "Projects"}
                 </span>
                 <span className="text-xs font-medium text-muted-foreground/50">
                   {activeTab === "chat"
                     ? filteredSessions.length
                     : activeTab === "create"
-                    ? filteredNotes.length
-                    : filteredProjects.length}
+                      ? filteredNotes.length
+                      : filteredProjects.length}
                 </span>
               </div>
               {renderList()}
@@ -604,8 +609,8 @@ export function AppSidebar({
               {renameItem?.type === "note"
                 ? "Note"
                 : renameItem?.type === "project"
-                ? "Project"
-                : "Chat"}
+                  ? "Project"
+                  : "Chat"}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
@@ -703,7 +708,7 @@ const SidebarItem = ({
     onClick={onClick}
     className={cn(
       "group relative flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-sidebar-accent/50 cursor-pointer transition-all duration-200 border border-transparent hover:border-sidebar-border/30",
-      isActive && "bg-sidebar-accent border-sidebar-border/50 shadow-sm"
+      isActive && "bg-sidebar-accent border-sidebar-border/50 shadow-sm",
     )}
   >
     {isPinned ? (
@@ -717,7 +722,7 @@ const SidebarItem = ({
           "mt-0.5 size-4 shrink-0 transition-colors",
           isActive
             ? "text-sidebar-foreground"
-            : "text-muted-foreground group-hover:text-sidebar-foreground"
+            : "text-muted-foreground group-hover:text-sidebar-foreground",
         )}
         strokeWidth={ICON_STROKE}
       />
@@ -726,7 +731,7 @@ const SidebarItem = ({
       <span
         className={cn(
           "text-sm font-medium truncate text-sidebar-foreground/90 group-hover:text-sidebar-foreground transition-colors capitalize",
-          isPinned && "font-semibold text-sidebar-foreground"
+          isPinned && "font-semibold text-sidebar-foreground",
         )}
       >
         {label}

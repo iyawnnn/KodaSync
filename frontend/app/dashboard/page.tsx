@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   SidebarProvider,
   SidebarInset,
@@ -20,12 +20,40 @@ import StudioCreator from "@/components/notes/StudioCreator";
 import ChatInterface from "@/components/chat/ChatInterface"; 
 
 export default function DashboardPage() {
-  // 🚀 CHANGED: Default is now "chat"
   const [activeTab, setActiveTab] = useState("chat");
   const [currentProject, setCurrentProject] = useState<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>("New Chat");
   const [editingNote, setEditingNote] = useState<any>(null);
+
+  // 🚀 ADDED: Event Listener for Command Palette Routing
+  useEffect(() => {
+    const handleDashboardAction = (e: any) => {
+      const action = e.detail;
+      if (action === "new-chat") {
+        setActiveTab("chat");
+        setCurrentSessionId(null);
+        setCurrentSessionTitle("New Chat");
+      } else if (action === "new-note" || action === "open-studio") {
+        setActiveTab("create");
+        setEditingNote(null);
+      }
+    };
+
+    // Check URL parameters on initial load (if coming from outside the dashboard)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get("action");
+      if (action) {
+        handleDashboardAction({ detail: action });
+        // Clean the URL so it doesn't trigger again on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      window.addEventListener("dashboard-action", handleDashboardAction);
+      return () => window.removeEventListener("dashboard-action", handleDashboardAction);
+    }
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -106,8 +134,6 @@ export default function DashboardPage() {
       />
 
       <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
-        
-        {/* Header */}
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
           <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
           <Separator orientation="vertical" className="mr-2 h-4 bg-border" />
@@ -131,7 +157,6 @@ export default function DashboardPage() {
           </Breadcrumb>
         </header>
 
-        {/* Content Area */}
         <div
           className={`flex-1 main-scrollbar ${
             activeTab === "chat" || activeTab === "create"
