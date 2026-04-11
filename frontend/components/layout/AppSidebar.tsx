@@ -3,24 +3,23 @@
 import * as React from "react";
 import api from "@/lib/api";
 import {
-  Code2,
-  MessageSquare,
-  Library,
+  Bot,
+  PenLine,
+  History,
   Plus,
   MessageCircle,
-  Search,
   MoreVertical,
   Folder,
   Trash2,
   Edit2,
   Pin,
   PinOff,
-  Sparkles,
   FileCode,
   Copy,
   Loader2,
   AlertTriangle,
   Layers,
+  Search,
 } from "lucide-react";
 import { NavUser } from "@/components/layout/NavUser";
 import { CommandTrigger } from "@/components/shared/CommandTrigger";
@@ -57,14 +56,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
-const ICON_STROKE = 1.5;
-
-// 🚀 REORDERED TABS: Chat First
-const TABS = [
-  { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "create", label: "Studio", icon: Code2 },
-  { id: "library", label: "Library", icon: Library },
-];
+const ICON_STROKE = 2.25;
 
 const formatLabel = (s: string) => {
   if (!s) return "";
@@ -92,7 +84,6 @@ export function AppSidebar({
   const [projects, setProjects] = React.useState<any[]>([]);
   const [sessions, setSessions] = React.useState<any[]>([]);
   const [notes, setNotes] = React.useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = React.useState("");
   const [newItemName, setNewItemName] = React.useState("");
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
@@ -129,7 +120,7 @@ export function AppSidebar({
     } catch (e) {}
   };
 
-  const handleCreate = async () => {
+  const handleCreateProject = async () => {
     if (!newItemName.trim()) return;
     try {
       const res = await api.post("/projects/", { name: newItemName });
@@ -269,22 +260,17 @@ export function AppSidebar({
     toast.success("Code copied");
   };
 
-  const filteredSessions = sessions.filter((s) =>
-    (s.title || "").toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-  const filteredProjects = projects.filter((p) =>
-    (p.name || "").toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-  const filteredNotes = notes.filter((n) =>
-    (n.title || "").toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const triggerSearch = () => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true })
+    );
+  };
 
-  const renderList = () => {
-    // 1. CHAT LIST
+  const renderContextualList = () => {
     if (activeTab === "chat") {
-      if (filteredSessions.length === 0)
-        return <EmptyState icon={Sparkles} label="Start a new chat" />;
-      return filteredSessions.map((s) => (
+      if (sessions.length === 0)
+        return <EmptyState icon={MessageCircle} label="No recent chats" />;
+      return sessions.map((s) => (
         <SidebarItem
           key={s.id}
           icon={s.is_pinned ? Pin : MessageCircle}
@@ -298,25 +284,16 @@ export function AppSidebar({
           onClick={() => onSelectSession(s.id, s.title)}
           actions={
             <>
-              <DropdownMenuItem
-                onClick={(e) => openRenameDialog(e, s, "session")}
-              >
+              <DropdownMenuItem onClick={(e) => openRenameDialog(e, s, "session")}>
                 <Edit2 className="mr-2 size-3.5" />
                 Rename
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => handlePin(e, s, "session")}>
-                {s.is_pinned ? (
-                  <PinOff className="mr-2 size-3.5" />
-                ) : (
-                  <Pin className="mr-2 size-3.5" />
-                )}
+                {s.is_pinned ? <PinOff className="mr-2 size-3.5" /> : <Pin className="mr-2 size-3.5" />}
                 {s.is_pinned ? "Unpin" : "Pin"}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="my-1" />
-              <DropdownMenuItem
-                onClick={(e) => confirmDelete(e, s, "session")}
-                className="text-destructive focus:text-destructive"
-              >
+              <DropdownMenuItem onClick={(e) => confirmDelete(e, s, "session")} className="text-destructive focus:text-destructive">
                 <Trash2 className="mr-2 size-3.5" />
                 Delete
               </DropdownMenuItem>
@@ -326,11 +303,10 @@ export function AppSidebar({
       ));
     }
 
-    // 2. STUDIO NOTES LIST
     if (activeTab === "create") {
-      if (filteredNotes.length === 0)
+      if (notes.length === 0)
         return <EmptyState icon={FileCode} label="No notes created yet" />;
-      return filteredNotes.map((n) => (
+      return notes.map((n) => (
         <SidebarItem
           key={n.id}
           icon={n.is_pinned ? Pin : FileCode}
@@ -340,9 +316,7 @@ export function AppSidebar({
           onClick={() => onSelectNote && onSelectNote(n)}
           actions={
             <>
-              <DropdownMenuItem
-                onClick={(e) => handleCopyCode(e, n.code_snippet)}
-              >
+              <DropdownMenuItem onClick={(e) => handleCopyCode(e, n.code_snippet)}>
                 <Copy className="mr-2 size-3.5" />
                 Copy Code
               </DropdownMenuItem>
@@ -351,10 +325,7 @@ export function AppSidebar({
                 Rename
               </DropdownMenuItem>
               <DropdownMenuSeparator className="my-1" />
-              <DropdownMenuItem
-                onClick={(e) => confirmDelete(e, n, "note")}
-                className="text-destructive focus:text-destructive"
-              >
+              <DropdownMenuItem onClick={(e) => confirmDelete(e, n, "note")} className="text-destructive focus:text-destructive">
                 <Trash2 className="mr-2 size-3.5" />
                 Delete
               </DropdownMenuItem>
@@ -364,7 +335,6 @@ export function AppSidebar({
       ));
     }
 
-    // 3. PROJECT LIST (Library)
     return (
       <div className="flex flex-col gap-1">
         <SidebarItem
@@ -375,8 +345,8 @@ export function AppSidebar({
           onClick={() => onSelectProject(null)}
         />
 
-        {filteredProjects.length > 0 ? (
-          filteredProjects.map((p) => (
+        {projects.length > 0 ? (
+          projects.map((p) => (
             <SidebarItem
               key={p.id}
               icon={p.is_pinned ? Pin : Folder}
@@ -386,25 +356,16 @@ export function AppSidebar({
               onClick={() => onSelectProject(p)}
               actions={
                 <>
-                  <DropdownMenuItem
-                    onClick={(e) => openRenameDialog(e, p, "project")}
-                  >
+                  <DropdownMenuItem onClick={(e) => openRenameDialog(e, p, "project")}>
                     <Edit2 className="mr-2 size-3.5" />
                     Rename
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={(e) => handlePin(e, p, "project")}>
-                    {p.is_pinned ? (
-                      <PinOff className="mr-2 size-3.5" />
-                    ) : (
-                      <Pin className="mr-2 size-3.5" />
-                    )}
+                    {p.is_pinned ? <PinOff className="mr-2 size-3.5" /> : <Pin className="mr-2 size-3.5" />}
                     {p.is_pinned ? "Unpin" : "Pin"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="my-1" />
-                  <DropdownMenuItem
-                    onClick={(e) => confirmDelete(e, p, "project")}
-                    className="text-destructive focus:text-destructive"
-                  >
+                  <DropdownMenuItem onClick={(e) => confirmDelete(e, p, "project")} className="text-destructive focus:text-destructive">
                     <Trash2 className="mr-2 size-3.5" />
                     Delete
                   </DropdownMenuItem>
@@ -425,192 +386,134 @@ export function AppSidebar({
     <>
       <Sidebar
         collapsible="icon"
-        className="border-r border-sidebar-border bg-sidebar font-sans text-sidebar-foreground transition-all duration-300 ease-in-out h-full"
+        className="border-r-0 bg-sidebar font-sans text-sidebar-foreground"
         data-testid="app-sidebar"
       >
-        <div className="flex h-full w-full flex-col justify-between">
-          <div className="flex flex-col flex-1 min-h-0">
-            {/* HEADER AREA */}
-            <div className="flex flex-col p-4 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:items-center border-b border-sidebar-border/50 bg-sidebar/50 backdrop-blur-sm z-10 transition-all shrink-0">
-              <div className="flex items-center gap-3 mb-5 px-1 group-data-[collapsible=icon]:mb-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
-                {/* 🚀 LOGO REPLACEMENT - Removed shadow and border */}
-                <div className="relative flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0">
-                  <Image
-                    src="/logo.png"
-                    alt="KodaSync Logo"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-
-                <div className="flex flex-col group-data-[collapsible=icon]:hidden transition-opacity duration-200">
-                  <span className="text-base font-bold tracking-tight text-sidebar-foreground leading-none">
-                    KodaSync
-                  </span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="inline-flex items-center rounded-md bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 ring-1 ring-inset ring-sidebar-border/50">
-                      Pro Plan
-                    </span>
-                  </div>
-                </div>
+        <TooltipProvider delayDuration={0}>
+          <div className="flex flex-col h-full w-full overflow-hidden">
+            
+            {/* HEADER SECTION - FIXED TOP PADDING & SEARCH VISIBILITY */}
+            <div className="flex-none pt-8 pb-4 px-4 z-10 transition-all group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pt-8 group-data-[collapsible=icon]:pb-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col">
+              
+              {/* Raw Static Logo & Name */}
+              <div className="flex items-center gap-3 mb-6 px-1 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:mb-4">
+                <Image
+                  src="/logo.png"
+                  alt="KodaSync Logo"
+                  width={28}
+                  height={28}
+                  className="shrink-0"
+                />
+                <span className="text-lg font-bold tracking-tight text-sidebar-foreground leading-none group-data-[collapsible=icon]:hidden">
+                  KodaSync
+                </span>
               </div>
 
-              <div className="mb-4 group-data-[collapsible=icon]:hidden transition-opacity duration-200">
+              {/* Unified Search - Expanded State */}
+              <div className="group-data-[collapsible=icon]:hidden w-full">
                 <CommandTrigger />
               </div>
 
-              {/* TABS */}
-              <div className="flex p-1 bg-sidebar-accent/50 rounded-lg mb-4 transition-all border border-sidebar-border/30 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:gap-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:border-none">
-                <TooltipProvider delayDuration={0}>
-                  {TABS.map((tab) => {
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <Tooltip key={tab.id}>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => setActiveTab(tab.id)}
-                            className={cn(
-                              "flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ease-out group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:rounded-lg",
-                              isActive
-                                ? "bg-sidebar-background text-sidebar-foreground shadow-sm ring-1 ring-sidebar-border group-data-[collapsible=icon]:bg-sidebar-accent"
-                                : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                            )}
-                          >
-                            <tab.icon
-                              className="size-4 group-data-[collapsible=icon]:size-5"
-                              strokeWidth={isActive ? 2 : 1.5}
-                            />
-                            <span className="group-data-[collapsible=icon]:hidden">
-                              {tab.label}
-                            </span>
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          hidden={state !== "collapsed"}
-                        >
-                          {tab.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </TooltipProvider>
+              {/* Unified Search - Collapsed State */}
+              <div className="hidden group-data-[collapsible=icon]:flex w-full justify-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={triggerSearch}
+                      className="flex items-center justify-center size-10 rounded-full transition-all duration-200 border border-transparent text-muted-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                    >
+                      <Search className="size-[18px] shrink-0 transition-colors" strokeWidth={ICON_STROKE} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Search</TooltipContent>
+                </Tooltip>
               </div>
+            </div>
 
-              {/* SEARCH & ADD */}
-              <div className="flex gap-2 items-center group-data-[collapsible=icon]:hidden transition-all duration-200 opacity-100 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden">
-                <div className="relative group flex-1">
-                  <Search
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-sidebar-foreground transition-colors"
-                    strokeWidth={ICON_STROKE}
-                  />
-                  <input
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-9 rounded-lg bg-background pl-9 pr-3 text-sm font-medium text-sidebar-foreground border border-sidebar-border shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sidebar-ring/50 focus:border-sidebar-border transition-all"
-                  />
-                </div>
+            {/* MAIN NAVIGATION */}
+            <div className="flex-none px-3 py-2 space-y-1 transition-all duration-200 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+               <MainNavItem 
+                 icon={Bot} 
+                 label="Ask Assistant" 
+                 isActive={activeTab === "chat"} 
+                 onClick={() => setActiveTab("chat")} 
+               />
+               <MainNavItem 
+                 icon={PenLine} 
+                 label="Studio Editor" 
+                 isActive={activeTab === "create"} 
+                 onClick={() => setActiveTab("create")} 
+               />
+               <MainNavItem 
+                 icon={History} 
+                 label="Library & History" 
+                 isActive={activeTab === "library"} 
+                 onClick={() => setActiveTab("library")} 
+               />
+            </div>
 
+            {/* CONTEXTUAL LIST */}
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 sidebar-scrollbar group-data-[collapsible=icon]:hidden">
+              
+              {/* Section Header with integrated Add Action */}
+              <div className="group flex items-center justify-between px-3 mb-2 mt-4">
+                <span className="text-[12px] font-bold text-sidebar-foreground/60 tracking-wide">
+                  {activeTab === "chat" ? "Recent" : activeTab === "create" ? "Notes" : "Projects"}
+                </span>
+                
+                {/* Contextual Action Button */}
                 {activeTab === "chat" ? (
-                  <Button
-                    onClick={handleNewChat}
-                    size="icon"
-                    className="h-9 w-9 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:brightness-110 shadow-sm shrink-0 border border-sidebar-border/10"
-                  >
-                    <Plus className="size-5" strokeWidth={2.5} />
-                  </Button>
+                  <button onClick={handleNewChat} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                     <Plus className="size-4" strokeWidth={2.5} />
+                  </button>
                 ) : activeTab === "create" ? (
-                  <Button
-                    onClick={() => {
-                      if (onSelectNote) onSelectNote(null);
-                    }}
-                    size="icon"
-                    className="h-9 w-9 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:brightness-110 shadow-sm shrink-0 border border-sidebar-border/10"
-                  >
-                    <Plus className="size-5" strokeWidth={2.5} />
-                  </Button>
+                  <button onClick={() => onSelectNote && onSelectNote(null)} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                     <Plus className="size-4" strokeWidth={2.5} />
+                  </button>
                 ) : (
                   <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        size="icon"
-                        className="h-9 w-9 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:brightness-110 shadow-sm shrink-0 border border-sidebar-border/10"
-                      >
-                        <Plus className="size-5" strokeWidth={2.5} />
-                      </Button>
+                      <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                        <Plus className="size-4" strokeWidth={2.5} />
+                      </button>
                     </PopoverTrigger>
-                    <PopoverContent
-                      className="w-60 p-2"
-                      align="end"
-                      sideOffset={8}
-                    >
+                    <PopoverContent className="w-56 p-2" align="start" sideOffset={4}>
                       <div className="flex gap-2">
                         <Input
                           autoFocus
                           value={newItemName}
                           onChange={(e) => setNewItemName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                          className="h-9 text-sm font-medium"
-                          placeholder="Name..."
+                          onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
+                          className="h-8 text-xs font-medium"
+                          placeholder="Project name..."
                         />
-                        <Button
-                          size="sm"
-                          onClick={handleCreate}
-                          className="h-9 w-9 p-0 bg-sidebar-primary text-sidebar-primary-foreground"
-                        >
-                          <Plus className="size-4" />
+                        <Button size="sm" onClick={handleCreateProject} className="h-8 px-2 bg-primary text-primary-foreground">
+                          Save
                         </Button>
                       </div>
                     </PopoverContent>
                   </Popover>
                 )}
               </div>
+
+              {renderContextualList()}
             </div>
 
-            {/* LIST AREA */}
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 sidebar-scrollbar group-data-[collapsible=icon]:hidden">
-              <div className="px-2 mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground/80 uppercase">
-                  {activeTab === "chat"
-                    ? "Conversations"
-                    : activeTab === "create"
-                      ? "Saved Notes"
-                      : "Projects"}
-                </span>
-                <span className="text-xs font-medium text-muted-foreground/50">
-                  {activeTab === "chat"
-                    ? filteredSessions.length
-                    : activeTab === "create"
-                      ? filteredNotes.length
-                      : filteredProjects.length}
-                </span>
-              </div>
-              {renderList()}
+            {/* FOOTER - ONLY NAVUSER */}
+            <div className="flex-none p-4 mt-auto bg-sidebar/50 flex items-center justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
+              <NavUser />
             </div>
-          </div>
 
-          {/* FOOTER */}
-          <div className="p-4 border-t border-sidebar-border/40 bg-sidebar/50 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:flex shrink-0 mt-auto">
-            <NavUser />
           </div>
-        </div>
+        </TooltipProvider>
       </Sidebar>
 
-      {/* Rename Dialog */}
-      <Dialog
-        open={!!renameItem}
-        onOpenChange={(open) => !open && setRenameItem(null)}
-      >
+      {/* RENAME MODAL */}
+      <Dialog open={!!renameItem} onOpenChange={(open) => !open && setRenameItem(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>
-              Rename{" "}
-              {renameItem?.type === "note"
-                ? "Note"
-                : renameItem?.type === "project"
-                  ? "Project"
-                  : "Chat"}
+              Rename {renameItem?.type === "note" ? "Note" : renameItem?.type === "project" ? "Project" : "Chat"}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
@@ -622,67 +525,36 @@ export function AppSidebar({
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameItem(null)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setRenameItem(null)}>Cancel</Button>
             <Button onClick={executeRename} disabled={renameLoading}>
-              {renameLoading && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {renameLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Modal */}
-      <Dialog
-        open={!!deleteItem}
-        onOpenChange={(open) => !open && setDeleteItem(null)}
-      >
+      {/* DELETE MODAL */}
+      <Dialog open={!!deleteItem} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <DialogContent className="sm:max-w-[425px] p-0 gap-0 overflow-hidden border-destructive/20 shadow-2xl">
           <div className="bg-destructive/10 p-6 flex flex-col items-center justify-center border-b border-destructive/10">
             <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center shadow-sm mb-3">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
-            <DialogTitle className="text-destructive text-lg font-bold">
-              Delete Item?
-            </DialogTitle>
+            <DialogTitle className="text-destructive text-lg font-bold">Delete Item?</DialogTitle>
             <DialogDescription className="text-center text-destructive/80 mt-1 max-w-[280px]">
               You are about to permanently delete <br />
-              <span className="font-bold text-foreground">
-                "{deleteItem?.name}"
-              </span>
+              <span className="font-bold text-foreground">"{deleteItem?.name}"</span>
             </DialogDescription>
           </div>
           <div className="p-6 bg-background">
             <div className="text-sm text-muted-foreground text-center mb-6 leading-relaxed">
-              This action{" "}
-              <span className="font-bold text-foreground">
-                cannot be undone
-              </span>
-              . All data associated with this {deleteItem?.type} will be removed
-              from our servers forever.
+              This action <span className="font-bold text-foreground">cannot be undone</span>. All data associated with this {deleteItem?.type} will be removed from our servers forever.
             </div>
             <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteItem(null)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={executeDelete}
-                disabled={deleteLoading}
-                className="flex-1 bg-destructive hover:bg-destructive/90"
-              >
-                {deleteLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
-                )}
+              <Button variant="outline" onClick={() => setDeleteItem(null)} className="flex-1">Cancel</Button>
+              <Button variant="destructive" onClick={executeDelete} disabled={deleteLoading} className="flex-1 bg-destructive hover:bg-destructive/90">
+                {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
                 Delete Forever
               </Button>
             </div>
@@ -695,73 +567,80 @@ export function AppSidebar({
 
 // --- SUB-COMPONENTS ---
 
-const SidebarItem = ({
-  icon: Icon,
-  label,
-  subLabel,
-  isActive,
-  isPinned,
-  onClick,
-  actions,
-}: any) => (
+const MainNavItem = ({ icon: Icon, label, isActive, onClick }: any) => {
+  const { state } = useSidebar();
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onClick}
+          className={cn(
+            "w-full flex items-center gap-3 px-4 py-3 rounded-full font-semibold text-[14px] transition-all duration-200 border border-transparent",
+            "group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
+            isActive 
+              ? "bg-sidebar-accent text-primary" 
+              : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+          )}
+        >
+          <Icon 
+            className={cn("size-[18px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground")} 
+            strokeWidth={ICON_STROKE} 
+          />
+          <span className="group-data-[collapsible=icon]:hidden">
+            {label}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right" hidden={state !== "collapsed"}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+const SidebarItem = ({ icon: Icon, label, subLabel, isActive, isPinned, onClick, actions }: any) => (
   <div
     onClick={onClick}
     className={cn(
-      "group relative flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-sidebar-accent/50 cursor-pointer transition-all duration-200 border border-transparent hover:border-sidebar-border/30",
-      isActive && "bg-sidebar-accent border-sidebar-border/50 shadow-sm",
+      "group relative flex items-center gap-3 px-4 py-2.5 rounded-full cursor-pointer transition-all duration-200 overflow-hidden border border-transparent",
+      isActive ? "bg-sidebar-accent/80" : "hover:bg-sidebar-accent/30"
     )}
   >
     {isPinned ? (
       <Pin
-        className="mt-0.5 size-4 shrink-0 text-sidebar-primary fill-sidebar-primary/10"
-        strokeWidth={2}
+        className={cn("size-[18px] shrink-0 transition-colors", isActive ? "text-primary fill-primary/20" : "text-muted-foreground")}
+        strokeWidth={ICON_STROKE}
       />
     ) : (
       <Icon
-        className={cn(
-          "mt-0.5 size-4 shrink-0 transition-colors",
-          isActive
-            ? "text-sidebar-foreground"
-            : "text-muted-foreground group-hover:text-sidebar-foreground",
-        )}
+        className={cn("size-[18px] shrink-0 transition-colors", isActive ? "text-sidebar-foreground" : "text-muted-foreground group-hover:text-sidebar-foreground")}
         strokeWidth={ICON_STROKE}
       />
     )}
-    <div className="flex flex-col min-w-0 flex-1 gap-0.5 pr-8">
-      <span
-        className={cn(
-          "text-sm font-medium truncate text-sidebar-foreground/90 group-hover:text-sidebar-foreground transition-colors capitalize",
-          isPinned && "font-semibold text-sidebar-foreground",
-        )}
-      >
+    
+    <div className="flex flex-col min-w-0 flex-1 gap-0 pr-6">
+      <span className={cn("text-[14px] font-semibold truncate transition-colors", isActive ? "text-sidebar-foreground" : "text-muted-foreground group-hover:text-sidebar-foreground", isPinned && "font-bold")}>
         {label}
       </span>
       {subLabel && (
-        <span className="text-xs text-muted-foreground/60 truncate capitalize">
-          {subLabel}
-        </span>
+        <span className="text-[12px] font-medium text-muted-foreground/60 truncate capitalize">{subLabel}</span>
       )}
     </div>
 
     {actions && (
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20">
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               onClick={(e) => e.stopPropagation()}
               variant="ghost"
-              className="h-7 w-5 p-0 rounded-md opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity hover:bg-sidebar-background hover:text-sidebar-foreground"
+              className="h-7 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity hover:bg-sidebar-background hover:text-sidebar-foreground"
             >
-              <MoreVertical
-                className="size-4 text-muted-foreground"
-                strokeWidth={2}
-              />
+              <MoreVertical className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-48 font-medium p-1.5 shadow-xl border-sidebar-border bg-popover text-popover-foreground"
-          >
+          <DropdownMenuContent align="end" className="w-48 font-medium p-1.5 shadow-xl border-sidebar-border bg-popover text-popover-foreground rounded-xl">
             {actions}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -771,8 +650,8 @@ const SidebarItem = ({
 );
 
 const EmptyState = ({ icon: Icon, label }: any) => (
-  <div className="flex flex-col items-center justify-center py-12 px-4 text-center opacity-50">
-    <Icon className="size-8 text-muted-foreground mb-3" strokeWidth={1} />
+  <div className="flex flex-col items-center justify-center py-10 px-4 text-center opacity-60">
+    <Icon className="size-6 text-muted-foreground mb-3" strokeWidth={1.5} />
     <p className="text-sm font-medium text-muted-foreground">{label}</p>
   </div>
 );
