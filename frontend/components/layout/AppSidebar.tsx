@@ -393,7 +393,7 @@ export function AppSidebar({
           <div className="flex flex-col h-full w-full overflow-hidden">
             
             {/* HEADER SECTION - FIXED TOP PADDING & SEARCH VISIBILITY */}
-            <div className="flex-none pt-8 pb-4 px-4 z-10 transition-all group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pt-8 group-data-[collapsible=icon]:pb-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col">
+            <div className="flex-none pt-6 pb-4 px-4 z-10 transition-all group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pt-4 group-data-[collapsible=icon]:pb-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col">
               
               {/* Raw Static Logo & Name */}
               <div className="flex items-center gap-3 mb-6 px-1 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:mb-4">

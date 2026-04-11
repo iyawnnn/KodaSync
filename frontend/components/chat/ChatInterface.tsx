@@ -30,10 +30,8 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isFetchingHistory, setIsFetchingHistory] = useState(false); // Prevents layout flashing
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  
-  // Dynamic user name state
   const [userName, setUserName] = useState("Ian"); 
   const [greeting, setGreeting] = useState("Hello");
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -76,7 +74,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
   }, [sessionId]);
 
   const loadHistory = async (id: string) => {
-    setIsFetchingHistory(true); // Lock layout to bottom during fetch
+    setIsFetchingHistory(true);
     setMessages([]); 
     setLoading(true);
     try {
@@ -201,40 +199,57 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         signal: abortController.signal,
       });
 
-      if (!response.body) throw new Error("No response body");
+     if (!response.body) throw new Error("No response body");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
 
+      // 1. The Smooth Typewriter Interval
       const flushInterval = setInterval(() => {
         setMessages((prev) => {
           const newMsgs = [...prev];
           const lastIndex = newMsgs.length - 1;
           if (newMsgs[lastIndex].role === "assistant") {
-             if (newMsgs[lastIndex].content !== streamBufferRef.current) {
-                newMsgs[lastIndex] = { ...newMsgs[lastIndex], content: streamBufferRef.current };
+             const currentText = newMsgs[lastIndex].content;
+             const fullText = streamBufferRef.current;
+
+             if (currentText !== fullText) {
+                // Easing Math: Types fast if far behind, slows down smoothly as it catches up
+                const diff = fullText.length - currentText.length;
+                const chunkSize = Math.max(1, Math.ceil(diff / 4)); 
+                
+                newMsgs[lastIndex] = { 
+                    ...newMsgs[lastIndex], 
+                    content: fullText.slice(0, currentText.length + chunkSize) 
+                };
              }
           }
           return newMsgs;
         });
         scrollToBottom(true);
-      }, 75);
+      }, 30); // 30ms provides a perfect 33fps visual rhythm
 
+      // 2. Read the network stream as fast as it arrives in the background
       while (!done) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) streamBufferRef.current += decoder.decode(value, { stream: true });
       }
-      clearInterval(flushInterval);
-      
-      setMessages((prev) => {
-        const newMsgs = [...prev];
-        const lastIndex = newMsgs.length - 1;
-        if (newMsgs[lastIndex].role === "assistant") {
-           newMsgs[lastIndex] = { ...newMsgs[lastIndex], content: streamBufferRef.current };
-        }
-        return newMsgs;
+
+      // 3. Wait for the visual typewriter to finish catching up before unlocking the UI
+      await new Promise<void>((resolve) => {
+         const checkDrain = setInterval(() => {
+            setMessages((prev) => {
+                if (prev[prev.length - 1].content.length >= streamBufferRef.current.length) {
+                    clearInterval(checkDrain);
+                    resolve();
+                }
+                return prev;
+            });
+         }, 30);
       });
+
+      clearInterval(flushInterval);
 
     } catch (error: any) {
       if (error.name !== "AbortError") {
@@ -250,6 +265,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
       abortControllerRef.current = null;
     }
   };
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -316,7 +332,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         </DialogContent>
       </Dialog>
 
-{/* Main Scroll Area */}
+      {/* Main Scroll Area */}
       <div className={cn(
         "min-h-0 relative w-full",
         (messages.length === 0 && !isFetchingHistory) ? "hidden" : "flex-1 flex flex-col"
@@ -324,7 +340,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         <div 
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 h-full overflow-y-auto px-4 pt-8 pb-12 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex flex-col"
+          className="flex-1 h-full overflow-y-auto px-4 pt-8 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex flex-col"
           style={{ scrollBehavior: "auto" }}
         >
           <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
@@ -338,12 +354,12 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
                       isLast={i === messages.length - 1}
                   />
               ))}
-              <div ref={messagesEndRef} className="h-8" />
+              <div ref={messagesEndRef} className="h-2" />
           </div>
         </div>
         
         {/* Opacity Mask / Gradient Fade */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent pointer-events-none z-10" />
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none z-10" />
       </div>
 
       {/* Animated Layout Wrapper for Empty State and Omnibar */}
@@ -351,7 +367,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         layout
         className={cn(
           "w-full px-4 flex flex-col",
-          (messages.length === 0 && !isFetchingHistory) ? "flex-1 items-center justify-center" : "flex-none pb-6 pt-2 z-20 bg-background"
+          (messages.length === 0 && !isFetchingHistory) ? "flex-1 items-center justify-center" : "flex-none pb-2 pt-1 z-20 bg-background"
         )}
       >
         <AnimatePresence>
@@ -497,7 +513,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
               </div>
           </div>
           
-          <motion.p layout="position" className="text-center text-[10px] text-muted-foreground mt-3 font-medium opacity-60">
+          <motion.p layout="position" className="text-center text-[10px] text-muted-foreground mt-1.5 font-medium opacity-60">
               KodaSync AI can make mistakes. Please verify important code.
           </motion.p>
         </motion.div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Loader2, Terminal, Copy, Check, Save, Sparkles } from "lucide-react"; 
+import { Terminal, Copy, Check, Save, Bot } from "lucide-react"; 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -10,6 +10,19 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+// Custom wrapper to hide the native scrollbar inside code blocks while preserving scroll functionality
+const PreWithHiddenScrollbar = ({ children, ...rest }: any) => (
+  <div 
+    {...rest} 
+    className={cn(
+      rest.className, 
+      "overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+    )}
+  >
+    {children}
+  </div>
+);
 
 const CodeBlock = ({ node, inline, className, children, onSave, ...props }: any) => {
   const match = /language-(\w+)/.exec(className || '');
@@ -47,7 +60,13 @@ const CodeBlock = ({ node, inline, className, children, onSave, ...props }: any)
             </button>
         </div>
       </div>
-      <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: 0, padding: '1.25rem', fontSize: '14px', background: 'transparent' }} {...props}>
+      <SyntaxHighlighter 
+        style={vscDarkPlus} 
+        language={language} 
+        PreTag={PreWithHiddenScrollbar} 
+        customStyle={{ margin: 0, padding: '1.25rem', fontSize: '14px', background: 'transparent' }} 
+        {...props}
+      >
         {codeString}
       </SyntaxHighlighter>
     </div>
@@ -59,7 +78,7 @@ const CodeBlock = ({ node, inline, className, children, onSave, ...props }: any)
 };
 
 const TableComponent = ({ children }: any) => (
-  <div className="overflow-x-auto my-6 rounded-xl border border-border shadow-sm bg-card">
+  <div className="overflow-x-auto my-6 rounded-xl border border-border shadow-sm bg-card [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
     <table className="w-full text-left border-collapse text-sm">{children}</table>
   </div>
 );
@@ -102,10 +121,15 @@ const MessageBubble = ({ role, content, loading, onSaveCode, isLast }: MessageBu
         isLast ? "mb-0" : "mb-4"
       )}
     >
-      {/* Sparkle Icon strictly for Assistant */}
+      {/* Animated Bot Icon strictly for Assistant */}
       {role === "assistant" && (
-        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center mt-1">
-           <Sparkles className="w-5 h-5 text-primary" />
+        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center mt-0.5">
+           <motion.div
+             animate={loading ? { scale: [1, 1.15, 1], opacity: [0.5, 1, 0.5] } : {}}
+             transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+           >
+             <Bot className="w-5 h-5 text-primary" />
+           </motion.div>
         </div>
       )}
 
@@ -113,21 +137,18 @@ const MessageBubble = ({ role, content, loading, onSaveCode, isLast }: MessageBu
         "text-[15px] leading-relaxed",
         role === "user" 
           ? "max-w-[85%] bg-primary text-primary-foreground rounded-3xl px-5 py-3.5 shadow-sm" 
-          : "flex-1 min-w-0 text-foreground py-1"
+          : "flex-1 min-w-0 text-foreground py-0.5" // Reduced padding ensures vertical alignment with the icon
       )}>
         {role === "user" ? (
           <div className="whitespace-pre-wrap">{content}</div>
         ) : (
           <div>
-            {content === "" && loading ? (
-              <div className="flex items-center gap-3 text-muted-foreground py-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> <span className="font-medium text-sm">Thinking...</span>
-              </div>
-            ) : (
+            {content !== "" && (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS(onSaveCode)}>
                 {content}
               </ReactMarkdown>
             )}
+            {/* The blinking cursor block */}
             {loading && content.length > 0 && (
               <span className="inline-block w-2.5 h-4 bg-primary ml-1 animate-pulse align-middle rounded-sm" />
             )}
