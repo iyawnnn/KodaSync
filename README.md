@@ -4,58 +4,54 @@
 ![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-KodaSync is a professional intelligence hub designed to centralize technical knowledge for software engineers. It combines a high-performance code editor with contextual AI agents to transform scattered code snippets into a searchable, neural knowledge base.
+KodaSync is a high-performance intelligence hub built for software engineers to centralize and interact with technical knowledge. By combining a professional Monaco-powered editor with contextual AI agents, KodaSync transforms scattered snippets into a searchable, neural knowledge base. The platform leverages advanced vector search to ensure engineers can find and chat with their technical data in real-time, maintaining critical context across complex projects.
 
 ## Technical Solution
 
-The platform solves the "lost context" problem in modern development by creating a semantic layer over every saved note. By utilizing high-dimensional vector embeddings, KodaSync understands the underlying intent and logic of your code rather than relying on traditional keyword matching.
+KodaSync solves the "lost context" problem inherent in modern software development. It creates a semantic layer over every saved note using high-dimensional vector embeddings, allowing the system to understand the underlying intent of code rather than relying on simple keyword matching.
 
 ### Key Functional Areas
 
-* **Neural Chat Interface:** An AI-powered workspace using **Retrieval Augmented Generation (RAG)** to provide accurate, project-specific answers by referencing your personal library.
-* **The Studio:** A full-featured code editor built with the **Monaco Editor** engine (the core of VS Code) for a native development experience.
-* **Semantic Note Library:** A centralized repository where notes are processed in the background to generate technical tags and embeddings automatically.
-* **Project Contextualization:** Organizes technical data into projects, allowing users to restrict AI agents to specific architectural rules and requirements.
-* **Knowledge Scraper:** A specialized utility that imports and cleans data directly from technical documentation URLs to expand the neural brain.
+* **Neural Chat Interface:** An AI-powered workspace utilizing **Retrieval Augmented Generation (RAG)**. It automatically retrieves the most relevant notes from your library to provide accurate, project-specific answers.
+* **The Studio (Code Editor):** A full-featured editor built with the **Monaco Editor** engine. It includes integrated AI actions to fix bugs, write documentation, scan for security vulnerabilities, and generate unit tests instantly.
+* **Semantic Note Library:** A centralized repository where every note is processed in the background to generate technical tags and vector embeddings for instant semantic search.
+* **Project Contextualization:** Group technical data into specific projects. Users can set a project "context" during chats to restrict the knowledge base to specific technical requirements and architectural rules.
+* **Knowledge Scraper:** A specialized utility to import data directly from documentation URLs. It automatically scrapes, cleans, and summarizes web content to expand your neural brain.
+
+
 
 ## Tech Stack
 
-The architecture is built for low latency and high concurrency using an async-first approach.
+The platform is architected for low latency and high concurrency using a modern, async-first approach.
 
 ### Frontend
-* **Next.js 15 (App Router):** High-performance React framework.
-* **Tailwind CSS & Shadcn/ui:** Modern, responsive design system.
-* **Monaco Editor:** Professional-grade code editing and syntax highlighting.
-* **Axios:** Robust HTTP client for API communication.
-* **Lucide React & Sonner:** Streamlined technical iconography and toast notifications.
+* **Next.js 15 (App Router):** Leverages React Server Components (RSC) for optimized performance and client-side interactivity for the chat and editor.
+* **Tailwind CSS & Shadcn/ui:** Implementation of a "Dark Glass" aesthetic with backdrop blurs and professional gradients.
+* **Monaco Editor:** Powers the code editing experience with VS Code-grade syntax highlighting and manipulation.
+* **Sonner & Lucide:** Streamlined notifications and high-signal technical iconography.
 
 ### Backend
-* **FastAPI:** A modern, high-performance Python framework used for building the primary API with asynchronous support.
-* **SQLModel:** Elegant database interaction combining SQLAlchemy and Pydantic.
-* **Groq SDK (Llama 3.1/3.3):** Powers the AI core with ultra-fast inference for technical reasoning.
-* **SlowAPI:** Token-bucket rate limiting to ensure system stability.
-* **Jose (JWT):** Secure, industry-standard authentication and session management.
+* **FastAPI:** A high-performance Python framework handling API requests asynchronously to prevent blocking during AI generation.
+* **SQLModel:** A hybrid of SQLAlchemy and Pydantic providing full type safety for database interactions.
+* **Groq SDK (Llama 3.1/3.3):** Powers the AI core with high-speed Llama models (`llama-3.3-70b-versatile` and `llama-3.1-8b-instant`).
+* **SlowAPI:** Implements token-bucket rate limiting to ensure system stability.
 
 ### Database & Cache
-* **PostgreSQL with pgvector (Supabase):** Relational storage with specialized vector support for semantic retrieval.
-* **Redis (Upstash):** High-speed caching for AI responses and rate-limiting state.
-
-## Core Features
-
-* **RAG Chat System:** Automatically retrieves relevant notes from your library to provide context-aware answers.
-* **AI Code Actions:** Integrated tools to **Fix**, **Document**, **Scan Security**, and **Generate Tests** instantly from the editor.
-* **Semantic Search:** Natural language search powered by **FastEmbed** 384-dimension vectors.
-* **URL Scraper:** Seamlessly import technical snippets and full documentation pages from the web.
-* **Background AI Tasking:** Non-blocking tag generation and embedding calculations to keep the UI responsive.
-* **Hybrid Authentication:** Support for traditional credentials and secure **GitHub OAuth** integration.
-* **Project Isolation:** Scope your searches and AI context to specific project boundaries.
-* **Real-time Event Bus:** Custom UI events ensure the sidebar and library update instantly during modifications.
+* **PostgreSQL with pgvector:** Stores structured user data and high-dimensional vector embeddings for semantic search.
+* **Redis:** High-speed cache for AI responses, search results, and rate limiting state management.
 
 ## Deployment & Infrastructure
 
-Designed for consistency across development and production environments.
+Designed for cloud scalability and consistent developer experience:
 
-* **Docker & Docker Compose:** Full containerization to ensure environment parity and simplified local setup.
-* **GitHub Actions:** A robust CI/CD pipeline that executes the full integration test suite on every push.
-* **Pytest:** Comprehensive testing suite covering API endpoints, authentication flows, and RAG logic.
-* **Managed Hosting:** Backend deployed on **Render** (Python 3 runtime) and Frontend on **Vercel** (Edge network).
+* **Docker & Docker Compose:** Fully containerized environment for both local development and production reliability.
+* **GitHub Actions (CI/CD):** Automated workflow that runs the full test suite on every push to ensure code quality.
+* **Hosting:** Backend deployed on **Render** (Python runtime) and Frontend on **Vercel** (Edge network).
+* **Infrastructure:** Managed **Supabase** for PostgreSQL/Vector storage and **Upstash** for serverless Redis.
+
+## Operational Features
+
+* **Hybrid Authentication:** Secure access via traditional credentials or **GitHub OAuth** integration.
+* **Robust Testing Suite:** Integrated **Pytest** workflow covering API endpoints, authentication, and RAG logic.
+* **Semantic Search Engine:** Utilizes the **FastEmbed** library to generate 384-dimension vectors for natural language searching.
+* **Background Processing:** Dispatches non-blocking AI tasks for tag generation and embedding calculations.

@@ -1,29 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalCommand } from "@/components/shared/GlobalCommand";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// 1. BEST PRACTICE: Define the base URL for social images to work
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kodasync.com"),
-  
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: {
     default: "KodaSync | AI-Powered Second Brain for Developers",
-    template: "%s | KodaSync", // This allows sub-pages to have titles like "Dashboard | KodaSync"
+    template: "%s | KodaSync",
   },
-  
   description: "Stop re-Googling the same code. KodaSync is the AI-powered snippet manager that captures, indexes, and retrieves your engineering team's collective intelligence using vector search.",
-  
   keywords: [
     "code snippet manager",
     "developer second brain",
@@ -33,34 +25,29 @@ export const metadata: Metadata = {
     "AI code search",
     "KodaSync"
   ],
-
   authors: [{ name: "KodaSync Team" }],
   creator: "Ian Macabulos",
-  
-  // Open Graph (Facebook, LinkedIn, Slack previews)
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://kodasync.com",
+    url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     title: "KodaSync | Your Organization's Engineering Memory",
     description: "Don't let knowledge leak. Sync snippets, search with AI, and retain your team's best code logic in one secure workspace.",
     siteName: "KodaSync",
     images: [
       {
-        url: "/og-image.png", // You should add a 1200x630px image to your public folder
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "KodaSync Dashboard Preview",
       },
     ],
   },
-
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
     apple: "/icon.png", 
   },
-
   robots: {
     index: true,
     follow: true,
@@ -74,7 +61,6 @@ export const metadata: Metadata = {
   },
 };
 
-// 2. BEST PRACTICE: Separate viewport export (Next.js 14+)
 export const viewport: Viewport = {
   themeColor: "#16a34a",
   width: "device-width",
@@ -88,9 +74,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
-      >
+      <body className={`${outfit.variable} font-sans antialiased`}>
+        <GlobalCommand />
         {children}
         <Toaster />
       </body>

@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
 import Cookies from "js-cookie";
-import { Textarea } from "@/components/ui/textarea";
+import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button";
 import { 
-  Send, StopCircle, Plus, Globe, Code2, Terminal, Cpu, Zap, ArrowRight, FileText, Sparkles, Database, Search, ShieldCheck, Layout, BookOpen
+  Send, StopCircle, Plus, Globe, Code2, Terminal, Cpu, Database, FileText, BookOpen
 } from "lucide-react";
 import { toast } from "sonner";
 import MessageBubble from "./MessageBubble";
@@ -23,19 +23,16 @@ const SUGGESTION_POOL = [
   { label: "Debug Python", text: "Help me find and fix the bug in this Python script:", icon: Terminal },
   { label: "React Hook", text: "Write a custom React hook to handle form validation:", icon: Cpu },
   { label: "SQL Query", text: "Write an optimized SQL query to join these three tables:", icon: Database },
-  { label: "Explain Regex", text: "Explain what this Regular Expression does step-by-step:", icon: Search },
-  { label: "Generate Tests", text: "Write comprehensive unit tests for this function using Jest:", icon: ShieldCheck },
-  { label: "CSS Grid", text: "Create a responsive grid layout using Tailwind CSS:", icon: Layout },
-  { label: "API Route", text: "Create a Next.js API route that handles a POST request:", icon: Zap },
 ];
 
 export default function ChatInterface({ sessionId }: { sessionId?: string }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [userName, setUserName] = useState("Ian"); 
   const [greeting, setGreeting] = useState("Hello");
-  const [subGreeting, setSubGreeting] = useState("How can I help you code today?");
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [activeSuggestions, setActiveSuggestions] = useState(SUGGESTION_POOL.slice(0, 4));
 
@@ -70,11 +67,13 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
       loadHistory(sessionId);
     } else {
       setMessages([]);
+      setIsFetchingHistory(false);
     }
     return () => abortControllerRef.current?.abort();
   }, [sessionId]);
 
   const loadHistory = async (id: string) => {
+    setIsFetchingHistory(true);
     setMessages([]); 
     setLoading(true);
     try {
@@ -91,6 +90,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         toast.error("Could not load history");
       }
     } finally {
+        setIsFetchingHistory(false);
         setLoading(false);
     }
   };
@@ -198,40 +198,57 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         signal: abortController.signal,
       });
 
-      if (!response.body) throw new Error("No response body");
+     if (!response.body) throw new Error("No response body");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
 
+      // 1. The Smooth Typewriter Interval
       const flushInterval = setInterval(() => {
         setMessages((prev) => {
           const newMsgs = [...prev];
           const lastIndex = newMsgs.length - 1;
           if (newMsgs[lastIndex].role === "assistant") {
-             if (newMsgs[lastIndex].content !== streamBufferRef.current) {
-                newMsgs[lastIndex] = { ...newMsgs[lastIndex], content: streamBufferRef.current };
+             const currentText = newMsgs[lastIndex].content;
+             const fullText = streamBufferRef.current;
+
+             if (currentText !== fullText) {
+                // Easing Math: Types fast if far behind, slows down smoothly as it catches up
+                const diff = fullText.length - currentText.length;
+                const chunkSize = Math.max(1, Math.ceil(diff / 4)); 
+                
+                newMsgs[lastIndex] = { 
+                    ...newMsgs[lastIndex], 
+                    content: fullText.slice(0, currentText.length + chunkSize) 
+                };
              }
           }
           return newMsgs;
         });
         scrollToBottom(true);
-      }, 75);
+      }, 30); // 30ms provides a perfect 33fps visual rhythm
 
+      // 2. Read the network stream as fast as it arrives in the background
       while (!done) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) streamBufferRef.current += decoder.decode(value, { stream: true });
       }
-      clearInterval(flushInterval);
-      
-      setMessages((prev) => {
-        const newMsgs = [...prev];
-        const lastIndex = newMsgs.length - 1;
-        if (newMsgs[lastIndex].role === "assistant") {
-           newMsgs[lastIndex] = { ...newMsgs[lastIndex], content: streamBufferRef.current };
-        }
-        return newMsgs;
+
+      // 3. Wait for the visual typewriter to finish catching up before unlocking the UI
+      await new Promise<void>((resolve) => {
+         const checkDrain = setInterval(() => {
+            setMessages((prev) => {
+                if (prev[prev.length - 1].content.length >= streamBufferRef.current.length) {
+                    clearInterval(checkDrain);
+                    resolve();
+                }
+                return prev;
+            });
+         }, 30);
       });
+
+      clearInterval(flushInterval);
 
     } catch (error: any) {
       if (error.name !== "AbortError") {
@@ -248,6 +265,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
     }
   };
 
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -256,7 +274,7 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background w-full relative">
+    <div className="flex flex-col h-full bg-background w-full relative overflow-hidden">
       
       <NoteCreator
         isOpen={isCreatorOpen}
@@ -313,179 +331,181 @@ export default function ChatInterface({ sessionId }: { sessionId?: string }) {
         </DialogContent>
       </Dialog>
 
-      <div 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 px-2 md:px-4 min-h-0 overflow-y-auto custom-scrollbar pt-4"
-        style={{ scrollBehavior: "auto" }}
-      >
-        {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-full px-4 pb-20 animate-in fade-in duration-500">
-                <div className="max-w-3xl w-full space-y-6 md:space-y-8 text-center">
-                    
-                    <div className="space-y-2">
-                        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter text-primary">
-                            {greeting}, Ian
-                        </h1>
-                        <p className="text-lg md:text-xl text-muted-foreground/80 font-light">
-                            {subGreeting}
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-2 gap-2 md:gap-3 pt-2 md:pt-4 text-left w-full">
-                        {activeSuggestions.map((s, i) => (
-                            <button
-                                key={i}
-                                onClick={() => handleSuggestionClick(s.text)}
-                                className={cn(
-                                    "flex items-center gap-3 p-3 md:p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-all duration-200 group relative overflow-hidden",
-                                    "hover:border-primary/20 h-full"
-                                )}
-                            >
-                                <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
-                                    <s.icon className="w-4 h-4 md:w-5 md:h-5" />
-                                </div>
-                                <span className="font-medium text-xs md:text-sm text-foreground/80 group-hover:text-foreground truncate">
-                                    {s.label}
-                                </span>
-                                <ArrowRight className="w-4 h-4 ml-auto opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-muted-foreground hidden md:block" />
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        ) : (
-            <div className="max-w-3xl mx-auto w-full py-4 md:py-8 px-2 md:px-4 flex flex-col gap-4">
-                {messages.map((msg, i) => (
-                    <MessageBubble
-                        key={i}
-                        role={msg.role}
-                        content={msg.content}
-                        loading={loading && i === messages.length - 1}
-                        onSaveCode={handleSaveCode}
-                        // 🚀 PASS isLast PROP
-                        isLast={i === messages.length - 1}
-                    />
-                ))}
-                <div ref={messagesEndRef} className="h-2" />
-            </div>
-        )}
+      {/* Main Scroll Area */}
+      <div className={cn(
+        "min-h-0 relative w-full",
+        (messages.length === 0 && !isFetchingHistory) ? "hidden" : "flex-1 flex flex-col"
+      )}>
+        <div 
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 h-full overflow-y-auto px-4 pt-8 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex flex-col"
+          style={{ scrollBehavior: "auto" }}
+        >
+          <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
+              {messages.map((msg, i) => (
+                  <MessageBubble
+                      key={i}
+                      role={msg.role}
+                      content={msg.content}
+                      loading={loading && i === messages.length - 1}
+                      onSaveCode={handleSaveCode}
+                      isLast={i === messages.length - 1}
+                  />
+              ))}
+              <div ref={messagesEndRef} className="h-2" />
+          </div>
+        </div>
+        
+        {/* Opacity Mask / Gradient Fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none z-10" />
       </div>
 
-      <div className="w-full p-2 pb-4 md:p-4 md:pb-6 z-10">
-        <div className="max-w-3xl mx-auto w-full relative">
-            
-            <div className="relative flex items-end w-full gap-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-3xl border border-border/60 shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/20">
-                
-                <Popover open={isToolsOpen} onOpenChange={setIsToolsOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-11 w-11 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80 shrink-0 transition-all ml-1 mb-0.5"
-                      title="Add Context"
-                    >
-                      <Plus className={cn("w-6 h-6 transition-transform duration-200", isToolsOpen && "rotate-45")} />
-                    </Button>
-                  </PopoverTrigger>
-                  
-                  <PopoverContent align="start" className="w-64 p-2 rounded-2xl border-border bg-popover text-popover-foreground shadow-xl" side="top" sideOffset={12}>
-                    <div className="space-y-3">
-                        <div className="space-y-1.5">
-                            <p className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                                Project Context
-                            </p>
-                            <ProjectSelector
-                                currentProjectId={selectedProjectId}
-                                onProjectSelect={(id) => setSelectedProjectId(id)}
-                            />
-                        </div>
-                        <div className="h-px bg-border/50 mx-1" />
-                        <div className="space-y-1">
-                             <p className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                                Actions
-                            </p>
-                            
-                            <NoteCreator
-                                currentProjectId={selectedProjectId}
-                                defaultTab="manual"
-                                mode="manual"
-                                onSuccess={() => setIsToolsOpen(false)}
-                                trigger={
-                                  <button className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg hover:bg-accent/80 text-left transition-colors text-foreground/80 hover:text-foreground group">
-                                    <div className="p-1.5 rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                                        <FileText className="w-3.5 h-3.5" />
-                                    </div>
-                                    <span>Create Note</span>
-                                  </button>
-                                }
-                            />
-                            
-                            <button 
-                                onClick={handleOpenNotePicker}
-                                className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg hover:bg-accent/80 text-left transition-colors text-foreground/80 hover:text-foreground group"
-                            >
-                                <div className="p-1.5 rounded-md bg-green-500/10 text-green-500 group-hover:bg-green-500 group-hover:text-white transition-colors">
-                                    <BookOpen className="w-3.5 h-3.5" />
-                                </div>
-                                <span>Import from Studio</span>
-                            </button>
-
-                            <NoteCreator
-                                currentProjectId={selectedProjectId}
-                                defaultTab="url"
-                                mode="url"
-                                onSuccess={handleUrlImportSuccess} 
-                                importMode="chat"
-                                trigger={
-                                  <button className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg hover:bg-accent/80 text-left transition-colors text-foreground/80 hover:text-foreground group">
-                                    <div className="p-1.5 rounded-md bg-purple-500/10 text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors">
-                                        <Globe className="w-3.5 h-3.5" />
-                                    </div>
-                                    <span>Import URL</span>
-                                  </button>
-                                }
-                            />
-                        </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                <Textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={selectedProjectId ? "Ask about this project..." : "Ask anything..."}
-                    className="flex-1 min-h-[44px] max-h-32 bg-transparent border-none focus-visible:ring-0 text-base shadow-none px-2 py-3 placeholder:text-muted-foreground/50 resize-none"
-                    disabled={loading}
-                    rows={1}
-                />
-
-                <div className="pr-1 pb-0.5">
-                    {loading ? (
-                        <Button onClick={handleStop} size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-destructive/10 text-destructive">
-                            <StopCircle className="w-6 h-6" />
-                        </Button>
-                    ) : (
-                        <Button 
-                            onClick={handleSend} 
-                            disabled={!input.trim()}
-                            size="icon" 
-                            className={cn(
-                                "h-10 w-10 rounded-full transition-all duration-300",
-                                input.trim() ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "bg-transparent text-muted-foreground hover:bg-secondary/80"
-                            )}
-                        >
-                            <Send className="w-5 h-5" />
-                        </Button>
-                    )}
-                </div>
-            </div>
-            
-            <p className="text-center text-[10px] text-muted-foreground mt-3 font-medium opacity-60">
-                KodaSync AI can make mistakes. Please verify important code.
+      {/* Standard Layout Wrapper for Empty State and Omnibar (Instant) */}
+      <div 
+        className={cn(
+          "w-full px-4 flex flex-col",
+          (messages.length === 0 && !isFetchingHistory) ? "flex-1 items-center justify-center" : "flex-none pb-2 pt-1 z-20 bg-background"
+        )}
+      >
+        {(messages.length === 0 && !isFetchingHistory) && (
+          <div className="w-full max-w-3xl text-center mb-8 flex flex-col items-center">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-primary mb-3">
+                {greeting}, {userName}
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground mb-10">
+                How can I help you code today?
             </p>
+
+            <div className="flex flex-wrap justify-center gap-3">
+                {activeSuggestions.map((s, i) => (
+                    <button
+                        key={i}
+                        onClick={() => handleSuggestionClick(s.text)}
+                        className="group flex items-center gap-2.5 px-5 py-3 rounded-full border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 shadow-sm hover:shadow-md"
+                    >
+                        <s.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <span className="font-medium text-sm text-foreground/80 group-hover:text-foreground transition-colors">
+                            {s.label}
+                        </span>
+                    </button>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <div className="max-w-4xl mx-auto w-full relative">
+          <div className="bg-card border border-border shadow-md rounded-[24px] p-2 flex items-end gap-2 transition-shadow focus-within:shadow-xl focus-within:border-primary/40">
+              
+              <Popover open={isToolsOpen} onOpenChange={setIsToolsOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent shrink-0 transition-all ml-1 mb-1"
+                    title="Add Context"
+                  >
+                    <Plus className={cn("w-5 h-5 transition-transform duration-200", isToolsOpen && "rotate-45")} />
+                  </Button>
+                </PopoverTrigger>
+                
+                <PopoverContent align="start" className="w-64 p-3 rounded-3xl border border-primary/20 bg-background shadow-2xl" side="top" sideOffset={12}>
+                  <div className="space-y-4">
+                      <div className="space-y-2">
+                          <p className="px-1 text-[11px] font-bold text-primary/60 uppercase tracking-widest">
+                              Project Context
+                          </p>
+                          <ProjectSelector
+                              currentProjectId={selectedProjectId}
+                              onProjectSelect={(id) => setSelectedProjectId(id)}
+                          />
+                      </div>
+                      <div className="h-px bg-primary/10 mx-1" />
+                      <div className="space-y-1.5">
+                           <p className="px-1 text-[11px] font-bold text-primary/60 uppercase tracking-widest mb-2">
+                              Quick Actions
+                          </p>
+                          
+                          <NoteCreator
+                              currentProjectId={selectedProjectId}
+                              defaultTab="manual"
+                              mode="manual"
+                              onSuccess={() => setIsToolsOpen(false)}
+                              trigger={
+                                <button className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-primary/10 text-left transition-all text-foreground/80 hover:text-primary group border border-transparent hover:border-primary/20">
+                                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shadow-sm">
+                                      <FileText className="w-4 h-4" />
+                                  </div>
+                                  <span>Create Note</span>
+                                </button>
+                              }
+                          />
+                          
+                          <button 
+                              onClick={handleOpenNotePicker}
+                              className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-primary/10 text-left transition-all text-foreground/80 hover:text-primary group border border-transparent hover:border-primary/20"
+                          >
+                              <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shadow-sm">
+                                  <BookOpen className="w-4 h-4" />
+                              </div>
+                              <span>Import from Studio</span>
+                          </button>
+
+                          <NoteCreator
+                              currentProjectId={selectedProjectId}
+                              defaultTab="url"
+                              mode="url"
+                              onSuccess={handleUrlImportSuccess} 
+                              importMode="chat"
+                              trigger={
+                                <button className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-primary/10 text-left transition-all text-foreground/80 hover:text-primary group border border-transparent hover:border-primary/20">
+                                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shadow-sm">
+                                      <Globe className="w-4 h-4" />
+                                  </div>
+                                  <span>Import URL</span>
+                                </button>
+                              }
+                          />
+                      </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <TextareaAutosize
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={selectedProjectId ? "Ask about this project..." : "Ask anything..."}
+                  className="flex-1 min-h-[44px] max-h-48 bg-transparent border-none focus-visible:ring-0 text-base shadow-none px-2 py-3 placeholder:text-muted-foreground/50 resize-none outline-none"
+                  disabled={loading}
+                  minRows={1}
+              />
+
+              <div className="pr-1 pb-1">
+                  {loading ? (
+                      <Button onClick={handleStop} size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-destructive/10 text-destructive">
+                          <StopCircle className="w-6 h-6" />
+                      </Button>
+                  ) : (
+                      <Button 
+                          onClick={handleSend} 
+                          disabled={!input.trim()}
+                          size="icon" 
+                          className={cn(
+                              "h-10 w-10 rounded-full transition-all duration-300",
+                              input.trim() ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "bg-transparent text-muted-foreground hover:bg-secondary"
+                          )}
+                      >
+                          <Send className="w-5 h-5" />
+                      </Button>
+                  )}
+              </div>
+          </div>
+          
+          <p className="text-center text-[10px] text-muted-foreground mt-1.5 font-medium opacity-60">
+              KodaSync AI can make mistakes. Please verify important code.
+          </p>
         </div>
       </div>
     </div>
