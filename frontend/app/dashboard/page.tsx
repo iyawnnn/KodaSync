@@ -26,10 +26,14 @@ export default function DashboardPage() {
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>("New Chat");
   const [editingNote, setEditingNote] = useState<any>(null);
 
-  // 🚀 ADDED: Event Listener for Command Palette Routing
+  // 🚀 FIXED: Handle object payloads and missing open-chat/open-note cases
   useEffect(() => {
-    const handleDashboardAction = (e: any) => {
-      const action = e.detail;
+    const handleDashboardAction = async (e: any) => {
+      // Support both new object payload and legacy string payload
+      const payload = e.detail;
+      const action = typeof payload === "string" ? payload : payload?.action;
+      const id = payload?.id;
+
       if (action === "new-chat") {
         setActiveTab("chat");
         setCurrentSessionId(null);
@@ -37,15 +41,33 @@ export default function DashboardPage() {
       } else if (action === "new-note" || action === "open-studio") {
         setActiveTab("create");
         setEditingNote(null);
+      } else if (action === "open-chat" && id) {
+        setActiveTab("chat");
+        setCurrentSessionId(id);
+        setCurrentSessionTitle("AI Chat");
+      } else if (action === "open-note" && id) {
+        try {
+          // Fetch notes dynamically to get the full note object for the Studio Editor
+          const api = (await import("@/lib/api")).default;
+          const res = await api.get("/notes/");
+          const targetNote = res.data.find((n: any) => n.id === id);
+          if (targetNote) {
+            setEditingNote(targetNote);
+            setActiveTab("create");
+          }
+        } catch (err) {
+          console.error("Failed to load note from Command Palette:", err);
+        }
       }
     };
 
-    // Check URL parameters on initial load (if coming from outside the dashboard)
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const action = params.get("action");
+      const id = params.get("id");
+      
       if (action) {
-        handleDashboardAction({ detail: action });
+        handleDashboardAction({ detail: { action, id } });
         // Clean the URL so it doesn't trigger again on refresh
         window.history.replaceState({}, document.title, window.location.pathname);
       }

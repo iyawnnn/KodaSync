@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import api from "@/lib/api";
+import { AxiosError } from "axios";
 import {
   CommandDialog,
   CommandEmpty,
@@ -13,8 +15,17 @@ import {
 } from "@/components/ui/command";
 import { FileText, MessageSquare, Code2 } from "lucide-react";
 
+interface SearchItem {
+  id: string;
+  title: string;
+}
+
 export function GlobalCommand() {
   const [open, setOpen] = useState(false);
+  const [chats, setChats] = useState<SearchItem[]>([]);
+  const [notes, setNotes] = useState<SearchItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const router = useRouter();
   const pathname = usePathname();
 
@@ -37,19 +48,57 @@ export function GlobalCommand() {
     };
   }, []);
 
-  // 🚀 ADDED: Smart Routing Logic
+  useEffect(() => {
+    if (!open) return;
+
+    const fetchSpotlightData = async () => {
+      setIsLoading(true);
+      try {
+        const [chatsRes, notesRes] = await Promise.allSettled([
+          api.get("/chat/sessions"), 
+          api.get("/notes/"),        
+        ]);
+
+        if (chatsRes.status === "fulfilled" && chatsRes.value.data) {
+          setChats(chatsRes.value.data);
+        } else if (chatsRes.status === "rejected") {
+          const error = chatsRes.reason as AxiosError;
+          console.error("Chats fetch failed:", error.response?.status, error.message);
+        }
+        
+        if (notesRes.status === "fulfilled" && notesRes.value.data) {
+          setNotes(notesRes.value.data);
+        } else if (notesRes.status === "rejected") {
+          const error = notesRes.reason as AxiosError;
+          console.error("Notes fetch failed:", error.response?.status, error.message);
+        }
+      } catch (error) {
+        console.error("Unexpected error during spotlight fetch:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSpotlightData();
+  }, [open]);
+
   const runCommand = useCallback(
-    (action: string) => {
+    (action: string, id?: string) => {
       setOpen(false);
+      
       setTimeout(() => {
         if (pathname === "/dashboard") {
-          // If already on the dashboard, trigger the local state switch instantly
           window.dispatchEvent(
-            new CustomEvent("dashboard-action", { detail: action }),
+            new CustomEvent("dashboard-action", { 
+              detail: { action, id } 
+            }),
           );
         } else {
-          // If coming from another page, pass it as a query parameter
-          router.push(`/dashboard?action=${action}`);
+          const queryParams = new URLSearchParams({ action });
+          if (id) {
+            queryParams.append("id", id);
+          }
+          router.push(`/dashboard?${queryParams.toString()}`);
         }
       }, 150);
     },
@@ -60,40 +109,121 @@ export function GlobalCommand() {
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>
+          {isLoading ? "Loading data..." : "No results found."}
+        </CommandEmpty>
 
         <CommandGroup heading="Quick Actions">
-          <CommandItem
-            disabled={false}
-            value="new-chat"
+          <CommandItem 
+            value="new chat create"
             onSelect={() => runCommand("new-chat")}
-            className="cursor-pointer"
+            className="!p-0 aria-disabled:opacity-100 data-[disabled=true]:opacity-100"
           >
-            <MessageSquare className="mr-2 h-4 w-4" />
-            <span>New Chat</span>
+            <div 
+              className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer pointer-events-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                runCommand("new-chat");
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <MessageSquare className="h-4 w-4 shrink-0" />
+              <span>New Chat</span>
+            </div>
           </CommandItem>
-          <CommandItem
-            disabled={false}
-            value="create-note"
+          
+          <CommandItem 
+            value="create new note"
             onSelect={() => runCommand("new-note")}
-            className="cursor-pointer"
+            className="!p-0 aria-disabled:opacity-100 data-[disabled=true]:opacity-100"
           >
-            <FileText className="mr-2 h-4 w-4" />
-            <span>Create Note</span>
+            <div 
+              className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer pointer-events-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                runCommand("new-note");
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <FileText className="h-4 w-4 shrink-0" />
+              <span>Create Note</span>
+            </div>
           </CommandItem>
         </CommandGroup>
 
         <CommandSeparator />
 
+        {chats.length > 0 && (
+          <CommandGroup heading="Recent Chats">
+            {chats.map((chat) => (
+              <CommandItem 
+                key={chat.id} 
+                // Injecting the title into the value makes it fully searchable by the user
+                value={`chat ${chat.title} ${chat.id}`} 
+                onSelect={() => runCommand("open-chat", chat.id)}
+                className="!p-0 aria-disabled:opacity-100 data-[disabled=true]:opacity-100"
+              >
+                <div 
+                  className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    runCommand("open-chat", chat.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <MessageSquare className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{chat.title}</span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {notes.length > 0 && (
+          <CommandGroup heading="Recent Notes">
+            {notes.map((note) => (
+              <CommandItem 
+                key={note.id} 
+                // Injecting the title into the value makes it fully searchable by the user
+                value={`note ${note.title} ${note.id}`}
+                onSelect={() => runCommand("open-note", note.id)}
+                className="!p-0 aria-disabled:opacity-100 data-[disabled=true]:opacity-100"
+              >
+                <div 
+                  className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    runCommand("open-note", note.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{note.title}</span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        <CommandSeparator />
+
         <CommandGroup heading="Tools">
-          <CommandItem
-            disabled={false}
-            value="open-studio"
+          <CommandItem 
+            value="open studio editor tool"
             onSelect={() => runCommand("open-studio")}
-            className="cursor-pointer"
+            className="!p-0 aria-disabled:opacity-100 data-[disabled=true]:opacity-100"
           >
-            <Code2 className="mr-2 h-4 w-4" />
-            <span>Open Studio</span>
+            <div 
+              className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer pointer-events-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                runCommand("open-studio");
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Code2 className="h-4 w-4 shrink-0" />
+              <span>Open Studio</span>
+            </div>
           </CommandItem>
         </CommandGroup>
       </CommandList>

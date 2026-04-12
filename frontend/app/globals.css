@@ -176,31 +176,35 @@
 }
 
 @layer utilities {
-  .sidebar-scrollbar::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  .sidebar-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .sidebar-scrollbar::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 10px;
-    transition: background-color 0.2s ease;
-  }
-  .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: var(--sidebar-border);
+  /* Subtle, Modern Scrollbar for Sidebars and Lists */
+  .sidebar-scrollbar::-webkit-scrollbar,
+  .main-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
   }
 
-  .main-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
+  .sidebar-scrollbar::-webkit-scrollbar-track,
   .main-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb,
   .main-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 99px;
+    background: color-mix(in oklch, var(--border), transparent 50%);
+    border-radius: 20px;
+    border: 1px solid transparent; /* Acts as padding */
+    background-clip: content-box;
+  }
+
+  .sidebar-scrollbar:hover::-webkit-scrollbar-thumb,
+  .main-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: var(--muted-foreground);
+    border: 1px solid transparent;
+  }
+
+  /* Custom scrollbar specifically for the Monaco Editor area */
+  .monaco-scroll-container .scrollbar.vertical,
+  .monaco-scroll-container .scrollbar.horizontal {
+    background: transparent !important;
   }
 }

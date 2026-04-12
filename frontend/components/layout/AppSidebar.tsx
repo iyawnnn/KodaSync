@@ -371,7 +371,7 @@ export function AppSidebar({
         <TooltipProvider delayDuration={0}>
           <div className="flex flex-col h-full w-full overflow-hidden">
             
-            <div className="flex-none pt-6 pb-4 px-4 z-10 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pt-4 group-data-[collapsible=icon]:pb-2">
+            <div className="flex-none pt-6 pb-2 px-4 z-10 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pt-4 group-data-[collapsible=icon]:pb-2">
               <div className="flex items-center justify-between mb-4 group-data-[collapsible=icon]:justify-center">
                 <div className="flex items-center gap-3 group-data-[collapsible=icon]:gap-0">
                   <Image
@@ -425,7 +425,7 @@ export function AppSidebar({
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 sidebar-scrollbar group-data-[collapsible=icon]:hidden">
-              <div className="group flex items-center justify-between px-3 mb-2 mt-4">
+              <div className="group flex items-center justify-between px-3 mb-2 mt-0">
                 <span className="text-[12px] font-bold text-sidebar-foreground/70 tracking-wide uppercase">
                   {activeTab === "chat" ? "Recent" : activeTab === "create" ? "Notes" : "Projects"}
                 </span>
