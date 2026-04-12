@@ -123,7 +123,6 @@ export default function StudioCreator({
   };
 
   const cleanAiResponse = (response: string) => {
-    // Dynamic construction bypasses markdown parser breakage
     const marker = "`" + "`" + "`";
     const codeBlockRegex = new RegExp(
       marker + "(?:\\w+)?\\n([\\s\\S]*?)" + marker,
@@ -140,7 +139,7 @@ export default function StudioCreator({
   };
 
   const handleAiAction = async (action: string) => {
-    if (!code) return toast.error("Please write some code first!");
+    if (!code) return toast.error("Please write some code first.");
     setFixing(true);
     setActiveAction(action);
     setAiCode(null);
@@ -173,7 +172,7 @@ export default function StudioCreator({
       setAiCode(null);
       setAiExplanation(null);
       setActiveView("code");
-      toast.success("Code updated successfully!");
+      toast.success("Code updated successfully.");
     }
   };
 
@@ -194,7 +193,7 @@ export default function StudioCreator({
       } else {
         const res = await api.post("/notes/", payload);
         setLastNote(res.data);
-        toast.success("Saved to Knowledge Base!");
+        toast.success("Saved to Knowledge Base.");
       }
 
       if (onSuccess) onSuccess();
@@ -250,7 +249,6 @@ export default function StudioCreator({
 
   return (
     <div className="flex flex-col h-full gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300 overflow-hidden bg-background">
-      {/* GLOBAL HEADER */}
       <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-sm p-2 z-30 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3 w-full sm:w-auto px-2">
           <div className="p-2.5 bg-primary/10 rounded-xl text-primary shrink-0">
@@ -331,7 +329,6 @@ export default function StudioCreator({
         </div>
       </div>
 
-      {/* MOBILE TOGGLE */}
       <div className="lg:hidden flex p-1 bg-zinc-100 rounded-xl mx-2 border border-zinc-200/50">
         <button
           onClick={() => setActiveView("code")}
@@ -362,10 +359,8 @@ export default function StudioCreator({
         </button>
       </div>
 
-      {/* WORKSPACE PANELS */}
       <div className="flex-1 min-h-0 relative">
         <div className="absolute inset-0 flex flex-col lg:flex-row gap-6">
-          {/* EDITOR PANEL */}
           <div
             className={cn(
               "flex-1 flex-col h-full bg-white rounded-2xl border border-zinc-200/80 shadow-sm overflow-hidden transition-all relative",
@@ -460,7 +455,6 @@ export default function StudioCreator({
                   hideCursorInOverviewRuler: true,
                   renderLineHighlight: "none",
                   smoothScrolling: true,
-                  // Modernized Monaco Scrollbar
                   scrollbar: {
                     verticalScrollbarSize: 6,
                     horizontalScrollbarSize: 6,
@@ -474,7 +468,6 @@ export default function StudioCreator({
               />
             </div>
 
-            {/* AI TOOLBAR - FLOATING AT BOTTOM */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md border border-zinc-200 shadow-xl rounded-full px-2 py-1.5 flex items-center gap-1 z-10 transition-all hover:shadow-2xl">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mx-3 hidden sm:block">
                 AI Actions
@@ -520,7 +513,6 @@ export default function StudioCreator({
             </div>
           </div>
 
-          {/* PREVIEW / OUTPUT PANEL */}
           <div
             className={cn(
               "flex-1 flex-col h-full bg-white rounded-2xl border border-zinc-200/80 shadow-sm overflow-hidden transition-all",
@@ -586,8 +578,13 @@ export default function StudioCreator({
                         padding: { top: 24, bottom: 90 },
                         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                         scrollbar: {
-                          verticalScrollbarSize: 8,
-                          horizontalScrollbarSize: 8,
+                          verticalScrollbarSize: 6,
+                          horizontalScrollbarSize: 6,
+                          verticalSliderSize: 6,
+                          horizontalSliderSize: 6,
+                          useShadows: false,
+                          vertical: "visible",
+                          horizontal: "visible",
                         },
                       }}
                     />
@@ -595,14 +592,6 @@ export default function StudioCreator({
                 </div>
               ) : lastNote ? (
                 <div className="absolute inset-0 flex flex-col animate-in fade-in zoom-in-95 duration-200 p-5">
-                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-center gap-3 text-primary shrink-0 mb-5 shadow-sm">
-                    <div className="bg-primary text-primary-foreground p-1.5 rounded-full shadow-sm">
-                      <Check className="w-4 h-4" />
-                    </div>
-                    <span className="text-sm font-bold tracking-tight">
-                      Successfully saved to Knowledge Base
-                    </span>
-                  </div>
                   <div className="flex-1 bg-white border border-zinc-200/80 rounded-xl shadow-sm overflow-hidden opacity-90">
                     <Editor
                       height="100%"
@@ -615,6 +604,15 @@ export default function StudioCreator({
                         fontSize: 13,
                         padding: { top: 24 },
                         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                        scrollbar: {
+                          verticalScrollbarSize: 6,
+                          horizontalScrollbarSize: 6,
+                          verticalSliderSize: 6,
+                          horizontalSliderSize: 6,
+                          useShadows: false,
+                          vertical: "visible",
+                          horizontal: "visible",
+                        },
                       }}
                     />
                   </div>

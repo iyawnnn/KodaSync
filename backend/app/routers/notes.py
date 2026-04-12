@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks, Query
+from typing import Optional, List
 import uuid
 import hashlib
 from collections import Counter
@@ -179,17 +180,19 @@ async def create_note(
     )
     return new_note
 
-
 @router.get("/", response_model=List[NoteRead])
 async def get_all_notes(
+    project_id: Optional[uuid.UUID] = Query(None, description="Filter notes by project ID"),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    statement = (
-        select(Note)
-        .where(Note.owner_id == current_user.id)
-        .order_by(Note.is_pinned.desc(), Note.created_at.desc())
-    )
+    statement = select(Note).where(Note.owner_id == current_user.id)
+    
+    if project_id:
+        statement = statement.where(Note.project_id == project_id)
+        
+    statement = statement.order_by(Note.is_pinned.desc(), Note.created_at.desc())
+    
     results = session.exec(statement).all()
     return results
 
